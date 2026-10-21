@@ -1,0 +1,81 @@
+﻿@import "tailwindcss";
+
+:root {
+  --forest: #205C43;
+  --deep-jungle: #123D30;
+  --leaf: #77B96A;
+  --sunshine: #FFD166;
+  --sky: #8BD3F7;
+  --coral: #FF8A72;
+  --cream: #FFF8E9;
+  --ink: #24352B;
+}
+
+@theme inline {
+  --color-forest: var(--forest);
+  --color-deep-jungle: var(--deep-jungle);
+  --color-leaf: var(--leaf);
+  --color-sunshine: var(--sunshine);
+  --color-sky: var(--sky);
+  --color-coral: var(--coral);
+  --color-cream: var(--cream);
+  --color-ink: var(--ink);
+  --font-nunito: var(--font-nunito);
+  --font-sans: var(--font-nunito);
+}
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-nunito), Nunito, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Jungle gradients */
+.jungle-gradient {
+  background: linear-gradient(135deg, var(--forest) 0%, var(--deep-jungle) 100%);
+}
+
+.sunshine-gradient {
+  background: linear-gradient(135deg, var(--sunshine) 0%, #FFB347 100%);
+}
+
+.sky-gradient {
+  background: linear-gradient(135deg, var(--sky) 0%, #5EB0E0 100%);
+}
+
+.leaf-gradient {
+  background: linear-gradient(135deg, var(--leaf) 0%, var(--forest) 100%);
+}
+
+.coral-gradient {
+  background: linear-gradient(135deg, var(--coral) 0%, #FF6B6B 100%);
+}
+
+.jungle-soft-gradient {
+  background: linear-gradient(180deg, var(--cream) 0%, #FFF0C9 50%, #E8F5E9 100%);
+}
+
+/* Soft shadows */
+.soft-shadow {
+  box-shadow: 0 4px 24px rgba(36, 53, 43, 0.08), 0 1.5px 6px rgba(36, 53, 43, 0.06);
+}
+
+.card-shadow {
+  box-shadow: 0 8px 32px rgba(32, 92, 67, 0.12), 0 2px 8px rgba(32, 92, 67, 0.08);
+}
+
+.jungle-shadow {
+  box-shadow: 0 6px 20px rgba(18, 61, 48, 0.15), 0 2px 8px rgba(18, 61, 48, 0.1);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
