@@ -1,0 +1,42 @@
+{
+  "name": "littleverse",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/learning.test.ts",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@eslint/eslintrc": "^3.3.7",
+    "@reduxjs/toolkit": "^2.13.0",
+    "ajv": "^6.15.0",
+    "es-iterator-helpers": "^1.4.0",
+    "eslint-plugin-react": "^7.37.5",
+    "jsx-ast-utils": "^3.3.5",
+    "lucide-react": "^0.544.0",
+    "motion": "^12.23.24",
+    "next": "16.4.2",
+    "postcss": "^8.5.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "^3.1.2"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@babel/types": "^7.29.8",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.2",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
