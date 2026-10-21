@@ -1,0 +1,1050 @@
+# LittleVerse AI
+## Product Requirements Document (PRD) & Implementation Specification
+
+**Product:** LittleVerse AI  
+**Initial module:** Jungle Counting Adventure  
+**Product category:** Voice-first, interactive children's learning platform  
+**Primary users:** Children aged 3–10, parents, and teachers  
+**Initial learning audience:** Nursery and kindergarten, approximately ages 4–6  
+**Development environment:** Claude Code  
+**Coding model:** Claude Opus 5.5, if available in the configured environment  
+**Frontend:** Next.js App Router, React, TypeScript  
+**Motion:** Motion for React  
+**Charts:** Recharts  
+**Backend target:** Supabase  
+**Voice AI target:** Bolna AI  
+**Document status:** Implementation-ready specification
+
+---
+
+# 1. Executive Summary
+
+LittleVerse AI is an interactive educational platform that transforms early learning into an animated adventure.
+
+Instead of asking children to navigate conventional educational dashboards or interact with a generic chatbot, LittleVerse presents learning activities as a playful world. Children explore illustrated environments, speak with a friendly learning companion, solve age-appropriate challenges, receive supportive feedback, and develop skills through guided practice.
+
+The platform must combine:
+
+1. Immersive, animated educational environments.
+2. Natural voice interaction and spoken instructions.
+3. Structured educational activities with validated answers.
+4. Adaptive hints and progressive difficulty.
+5. Meaningful learning-progress tracking.
+6. Parent and teacher visibility.
+7. Strong child-safety and privacy boundaries.
+
+The first release must focus on one polished vertical slice: **Jungle Counting Adventure**.
+
+The objective is not to produce a collection of attractive static screens. It is to deliver one complete learning experience with functional interactions, an understandable learning loop, persistent-ready data structures, and a coherent visual identity.
+
+## Product vision
+
+Make learning feel like exploring a magical world with a patient companion.
+
+## Core product promise
+
+Every interaction should help a child discover something, practice a skill, or demonstrate understanding.
+
+## Primary success criterion
+
+A child can complete a short counting adventure, receive appropriate feedback, and produce a structured learning result that a parent can inspect.
+
+---
+
+# 2. Problem Statement
+
+Young children often encounter educational products designed around reading, repetitive quizzes, generic videos, or adult-oriented dashboards.
+
+These approaches may not suit children who are still developing reading fluency, attention control, vocabulary, or confidence in answering questions.
+
+Parents and teachers also need a better way to understand what a child actually practiced, rather than relying solely on screen time, points, or completion badges.
+
+LittleVerse addresses these needs through short, interactive, multimodal learning experiences.
+
+## Problems to solve
+
+- Children should not need strong reading skills to begin learning.
+- Incorrect answers should trigger useful guidance instead of discouragement.
+- Learning should feel interactive rather than passive.
+- Difficulty should adapt to demonstrated understanding.
+- Parents should be able to see what the child practiced and where support may help.
+- Voice AI must remain bounded, reliable, and appropriate for young users.
+
+## Product principles
+
+1. Learning before entertainment.
+2. Interaction before passive consumption.
+3. Encouragement before correction.
+4. Demonstrated understanding before progression.
+5. Privacy before personalization.
+6. Reliability before feature quantity.
+7. Accessible experiences before visual complexity.
+
+---
+
+# 3. Target Users and Personas
+
+## Persona A: The young learner
+
+**Age:** 4–6 years  
+**Abilities:** Developing language, counting, attention, and early reasoning  
+**Needs:** Clear instructions, large controls, engaging visuals, positive reinforcement  
+**Limitations:** May struggle with reading, typing, long instructions, or precise speech recognition
+
+The child should be able to complete the core adventure through a combination of spoken answers and visual interactions.
+
+## Persona B: The parent
+
+**Needs:**
+- Understand what the child learned.
+- See which activities were completed.
+- Identify skills that may benefit from additional practice.
+- Control access, session duration, and learning settings.
+- Understand what data is stored.
+
+The parent dashboard should prioritize meaningful learning evidence rather than vanity metrics.
+
+## Persona C: The teacher
+
+**Needs:**
+- Review skill-level progress.
+- Identify activities that children find difficult.
+- Recommend additional practice.
+- Inspect activity outcomes without needing access to unrestricted conversations.
+
+Teacher features are part of the product direction, but full classroom management is outside the initial MVP.
+
+---
+
+# 4. Product Scope
+
+## P0 — Required for the first working release
+
+- Responsive Next.js application.
+- Illustrated explorer home screen.
+- Jungle Counting Adventure.
+- Friendly learning companion named Miko.
+- Three distinct counting challenges.
+- Visual answer selection.
+- Microphone interaction interface with honest connection states.
+- Spoken-instruction and feedback architecture.
+- Correct-answer validation.
+- Supportive incorrect-answer feedback.
+- Adaptive hints.
+- Activity completion summary.
+- Learning-progress data model.
+- Parent dashboard.
+- Interactive learning graphs using Recharts.
+- Responsive design and accessible controls.
+- Loading, error, empty, and completion states.
+- Basic child-safety and privacy controls.
+
+## P1 — Implement after the core vertical slice works
+
+- Live Bolna voice integration.
+- Supabase persistence.
+- Parent-managed learner profiles.
+- Real activity history.
+- Configurable session limits.
+- Additional language support verified through testing.
+- More sophisticated skill-level adaptation.
+
+## P2 — Future expansion
+
+- Alphabet Garden.
+- Number Kingdom.
+- Little Scientists.
+- Reading comprehension adventures.
+- Additional regional languages.
+- Teacher classroom dashboards.
+- Curriculum packs.
+- Additional learning domains.
+
+Do not implement every future feature in the first iteration.
+
+---
+
+# 5. Information Architecture
+
+The application should have two distinct experiences: a child-facing adventure and an adult-facing dashboard.
+
+## Child-facing routes
+
+- `/` — Explorer home.
+- `/adventure/jungle-counting` — Main learning experience.
+- `/adventure/jungle-counting/complete` — Activity summary.
+
+## Adult-facing routes
+
+- `/parent` — Parent dashboard.
+- `/parent/progress` — Detailed skill progress.
+- `/parent/settings` — Learning preferences and privacy settings.
+
+These routes may be implemented in the initial codebase, but the first polished flow should prioritize the explorer home, adventure, and parent dashboard.
+
+## Navigation rules
+
+- The child interface must not expose developer controls or raw data.
+- Parent routes should be protected in production.
+- Use a clearly visible adult-facing exit or parent-access control.
+- Do not rely on an easily guessed URL as the sole access control mechanism.
+- Keep the child experience visually distinct from the adult dashboard.
+
+---
+
+# 6. Visual Design System
+
+## Creative direction
+
+Create a premium, whimsical, illustrated storybook experience.
+
+The interface should feel like a carefully art-directed children's adventure game rather than a generic SaaS template.
+
+### Visual characteristics
+
+- Rich illustrated environments.
+- Friendly animal characters.
+- Layered jungle foliage.
+- Soft depth and atmospheric lighting.
+- Rounded interactive surfaces.
+- Large, clear typography.
+- Expressive but restrained animation.
+- Strong contrast for important instructions.
+- Playful visual feedback tied to learning actions.
+
+### Color palette
+
+Use a consistent token system:
+
+- Forest green: `#205C43`
+- Deep jungle: `#123D30`
+- Leaf green: `#77B96A`
+- Warm sunshine: `#FFD166`
+- Sky blue: `#8BD3F7`
+- Coral accent: `#FF8A72`
+- Cream background: `#FFF8E9`
+- Primary text: `#24352B`
+
+These are initial design tokens, not rigid constraints. Validate readability and contrast before finalizing them.
+
+### Typography
+
+Use a friendly, highly legible sans-serif family, such as Nunito or a similar rounded family.
+
+Use:
+- Large headings for the child experience.
+- Short instructions.
+- Generous line spacing.
+- High readability at tablet viewing distances.
+- A more compact typographic scale for the parent dashboard.
+
+Do not use decorative typefaces for essential instructions.
+
+### Layout
+
+For the child experience:
+- Full-screen illustrated environment.
+- Central learning activity.
+- Large answer controls.
+- Prominent voice interaction control.
+- Minimal navigation.
+- Responsive composition for mobile, tablet, and desktop.
+
+For the parent experience:
+- Clear navigation.
+- Compact metric cards.
+- Progress charts.
+- Skill breakdowns.
+- Recent activity.
+- Helpful next-step recommendations.
+
+### Visual assets
+
+Prefer purpose-created illustrations, lightweight SVG assets, or licensed assets.
+
+Do not depend on random remote image URLs or emoji-only layouts to achieve the finished design.
+
+If custom images are unavailable during the first implementation, build a cohesive placeholder environment using local SVG illustrations, CSS layering, gradients, and simple vector characters.
+
+Do not block the core experience on unavailable external assets.
+
+---
+
+# 7. Child Experience: Explorer Home
+
+## Objective
+
+Give a child an immediate sense of discovery and make starting an activity effortless.
+
+## Main components
+
+### 7.1 Hero environment
+
+Create a large illustrated jungle scene containing:
+- Layered trees and foliage.
+- A winding path.
+- Flowers, butterflies, and small environmental details.
+- A friendly elephant character, Miko.
+- An obvious entry point into the counting adventure.
+
+The scene must remain visually balanced across viewport sizes.
+
+### 7.2 Learning companion
+
+Miko is a friendly illustrated elephant who guides the child.
+
+Character states:
+- Idle.
+- Greeting.
+- Listening.
+- Thinking.
+- Speaking.
+- Celebrating.
+- Encouraging.
+
+Represent these states through reusable component variants, CSS animations, or Motion animations.
+
+Do not generate an unrelated character for every state.
+
+### 7.3 Adventure card
+
+Display:
+
+**Jungle Counting Adventure**
+
+Subtitle:
+
+"Help Miko find the jungle animals!"
+
+Show:
+- Estimated duration of approximately 3–5 minutes.
+- Learning objective: counting quantities from 1 to 5.
+- A large start button.
+- A visible indication that spoken and tap-based answers are available.
+
+### 7.4 Other destinations
+
+Show future destinations as preview cards:
+- Alphabet Garden.
+- Number Kingdom.
+- Science Island.
+
+They may appear as locked or coming soon, but must not appear functional if their activities have not been implemented.
+
+### Acceptance criteria
+
+- A child can identify the primary action without reading a paragraph.
+- The adventure starts through one obvious interaction.
+- Buttons and touch targets are sufficiently large.
+- The environment adapts to mobile and tablet widths.
+- No broken images, placeholder links, or nonfunctional controls are visible.
+
+---
+
+# 8. Jungle Counting Adventure
+
+This is the core MVP and should receive the most implementation and testing effort.
+
+## Learning objective
+
+The child practices counting objects and associating spoken number words with quantities from 1 to 5.
+
+## Initial session
+
+Target duration: approximately 3–5 minutes.
+
+## Activity sequence
+
+### Challenge 1: Count the butterflies
+
+Display three clearly distinguishable butterflies.
+
+Miko says:
+
+"Look at the butterflies! Can you count them?"
+
+The child can:
+- Speak the answer.
+- Tap a numbered answer.
+- Request a hint.
+
+Expected answer: 3.
+
+On success:
+- Miko celebrates briefly.
+- The UI confirms the answer.
+- The result is recorded.
+- The next activity becomes available.
+
+### Challenge 2: Count the bananas
+
+Display five clearly distinguishable bananas.
+
+Miko says:
+
+"How many bananas can you see?"
+
+Expected answer: 5.
+
+If the child struggles, offer a counting hint that highlights objects one at a time.
+
+### Challenge 3: Help the elephants
+
+Display four elephants.
+
+Miko asks:
+
+"Can you help me find four elephants?"
+
+Expected answer: 4.
+
+The child should be allowed to tap each object to count it or select a numbered answer.
+
+### Important implementation requirement
+
+Do not rely on visual counting alone to establish the answer. Each activity must have a structured data definition containing the expected answer and validation rules.
+
+Example conceptual structure:
+
+- Activity ID.
+- Skill ID.
+- Prompt.
+- Visual object type.
+- Object count.
+- Expected answer.
+- Available answer options.
+- Hint sequence.
+- Completion rule.
+- Difficulty level.
+
+## Answer feedback
+
+### Correct answer
+
+- Brief positive reinforcement.
+- A restrained celebratory animation.
+- A recorded successful attempt.
+- Progress to the next challenge.
+
+### Incorrect answer
+
+- Friendly acknowledgement.
+- No buzzer, punishment, or shame.
+- A progressively clearer hint.
+- An opportunity to try again.
+
+Example:
+
+"Good try! Let's count them together."
+
+Then highlight the objects one by one.
+
+Do not tell the child they have mastered a skill simply because they eventually selected the right answer after multiple hints.
+
+## Adaptive hint sequence
+
+1. First incorrect response: encourage another attempt.
+2. Second incorrect response: highlight or count the objects together.
+3. Continued difficulty: demonstrate the solution and invite the child to repeat the count.
+4. Record the result with the appropriate assistance level.
+
+The activity should finish even when the child needs help. Do not trap the child in an endless retry loop.
+
+## Session completion
+
+Display:
+- A short congratulatory message.
+- Challenges attempted.
+- Correct answers.
+- Hints used.
+- Skills practiced.
+- A button to return to the explorer home.
+- A parent-facing option to view the learning summary.
+
+Rewards should celebrate effort and learning, not pressure children to continue playing.
+
+---
+
+# 9. Voice Interaction Requirements
+
+## Product goal
+
+Make voice interaction feel natural while retaining a fully usable visual fallback.
+
+## Initial voice states
+
+Implement an explicit state machine:
+
+- `idle`
+- `requesting_permission`
+- `listening`
+- `processing`
+- `speaking`
+- `error`
+- `unavailable`
+
+The UI must always communicate the current state.
+
+## Initial implementation
+
+First implement the interaction interface and a working typed or tap-based fallback.
+
+The microphone control must not pretend to be connected to an actual voice service.
+
+If voice support is unavailable, show a clear explanation and allow the child to continue using the visual activity.
+
+## Live integration phase
+
+Integrate Bolna only after verifying the appropriate supported interface and API workflow.
+
+Requirements:
+- Secure server-side API credentials.
+- No exposed provider secrets in client-side code.
+- A defined voice-session lifecycle.
+- Explicit loading and failure states.
+- Appropriate interruption handling.
+- Structured activity outcomes.
+- Correct mapping between voice answers and the active activity.
+- Recovery from timeouts and failed calls.
+
+## Educational control
+
+The LLM may:
+- Narrate the story.
+- Ask the configured question.
+- Provide approved hints.
+- Encourage the child.
+- Respond naturally to an answer.
+
+The LLM must not:
+- Invent activity answers.
+- Directly modify learning records without validation.
+- Change the curriculum arbitrarily.
+- Make unsupported claims about a child's intelligence or development.
+- Initiate unrelated conversations outside the configured learning experience.
+
+The learning engine remains responsible for scoring, activity progression, and skill tracking.
+
+---
+
+# 10. Parent Dashboard
+
+## Objective
+
+Translate activity results into understandable learning evidence.
+
+The dashboard should feel like a polished, professional educational analytics interface.
+
+## Dashboard sections
+
+### 10.1 Overview
+
+Display:
+- Activities completed.
+- Skills practiced.
+- Recent activity.
+- Learning time, when reliably measured.
+- A suggested next activity.
+
+Do not equate time spent with learning quality.
+
+### 10.2 Learning progress chart
+
+Use Recharts to show progress over multiple sessions.
+
+Requirements:
+- Meaningful axes and labels.
+- Responsive chart containers.
+- Accessible tooltips.
+- A clear empty state.
+- Consistent chart colors.
+- No fabricated historical data in production.
+
+### 10.3 Skill breakdown
+
+Initially support:
+- Counting.
+- Number recognition.
+- Early phonics as a future skill.
+
+Show skill-specific evidence and recent activity outcomes.
+
+Do not present a single percentage as a validated developmental assessment.
+
+### 10.4 Recent activity
+
+For each session, display:
+- Date and duration.
+- Activity name.
+- Challenges attempted.
+- Correct responses.
+- Hints used.
+- Skills practiced.
+
+### 10.5 Recommendations
+
+Generate simple, explainable suggestions from recorded outcomes.
+
+Example:
+
+"Practice counting objects from 1 to 5 with a visual counting activity."
+
+Do not make clinical, psychological, or developmental diagnoses.
+
+## Data integrity
+
+Charts and summaries must derive from the underlying session records.
+
+If data is missing, show an honest empty state rather than invented values.
+
+If demonstration data is used during development, label it clearly as sample data.
+
+---
+
+# 11. Technical Architecture
+
+## Frontend
+
+Use:
+- Next.js App Router.
+- React.
+- TypeScript with strict mode.
+- Tailwind CSS.
+- Motion for React.
+- Recharts.
+- Lucide React icons.
+
+## Backend target
+
+Use:
+- Supabase PostgreSQL.
+- Supabase authentication for parent-managed access.
+- Server-side authorization.
+- Row Level Security for learner data.
+- Validated server actions or route handlers.
+
+## Voice layer
+
+Use Bolna for the supported voice-agent workflow after verifying the relevant integration requirements.
+
+Keep the voice provider behind a small adapter interface so the learning activity engine is not tightly coupled to one provider.
+
+## Conceptual architecture
+
+Child interface
+→ Voice interaction layer
+→ Structured learning activity engine
+→ Answer validation and hint selection
+→ Learning event persistence
+→ Parent dashboard analytics
+
+The parent dashboard reads recorded activity outcomes, not unrestricted model-generated summaries.
+
+## Suggested source structure
+
+```text
+littleverse-ai/
+├── public/
+│   ├── images/
+│   └── illustrations/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx
+│   │   ├── adventure/
+│   │   │   └── jungle-counting/
+│   │   │       ├── page.tsx
+│   │   │       └── complete/
+│   │   │           └── page.tsx
+│   │   ├── parent/
+│   │   │   ├── page.tsx
+│   │   │   ├── progress/
+│   │   │   │   └── page.tsx
+│   │   │   └── settings/
+│   │   │       └── page.tsx
+│   │   ├── globals.css
+│   │   └── layout.tsx
+│   ├── components/
+│   │   ├── ui/
+│   │   ├── explorer/
+│   │   ├── adventure/
+│   │   ├── character/
+│   │   ├── voice/
+│   │   └── parent/
+│   ├── features/
+│   │   └── learning/
+│   │       ├── activities.ts
+│   │       ├── types.ts
+│   │       ├── validation.ts
+│   │       ├── scoring.ts
+│   │       └── progress.ts
+│   ├── lib/
+│   │   ├── utils.ts
+│   │   ├── supabase/
+│   │   └── voice/
+│   └── types/
+├── .env.example
+├── package.json
+└── README.md
+```
+
+Adapt the structure if the implementation benefits from fewer files. Do not create empty abstractions simply to fill the directory tree.
+
+---
+
+# 12. Data Model
+
+The initial local prototype should use typed activity definitions and session state.
+
+The production architecture should support the following entities.
+
+## Learners
+
+- `id`
+- `parent_id`
+- `display_name` or a pseudonym
+- `age_band`
+- `preferred_language`
+- `created_at`
+
+Collect only the information necessary for the experience.
+
+## Learning activities
+
+- `id`
+- `title`
+- `skill_id`
+- `difficulty`
+- `activity_definition`
+- `version`
+
+## Learning sessions
+
+- `id`
+- `learner_id`
+- `activity_id`
+- `started_at`
+- `completed_at`
+- `status`
+
+## Activity attempts
+
+- `id`
+- `session_id`
+- `challenge_id`
+- `answer_type`
+- `is_correct`
+- `hint_level`
+- `attempt_number`
+- `created_at`
+
+Avoid storing raw voice recordings by default.
+
+If speech transcription is required, minimize the retained content and apply appropriate retention and access policies.
+
+## Progress aggregation
+
+Calculate progress from validated attempts.
+
+The scoring implementation must distinguish:
+- Correct without assistance.
+- Correct after a hint.
+- Correct after a demonstration.
+- Incorrect or incomplete.
+
+Do not label a child as having mastered a skill based on a single successful answer.
+
+---
+
+# 13. Motion Design Specification
+
+Use Motion for React to create a consistent motion language.
+
+## Character animation
+
+Support:
+- Gentle idle movement.
+- A listening state.
+- A thinking state.
+- A speaking state.
+- Short success celebrations.
+- Supportive reactions after an incorrect answer.
+
+## Interface transitions
+
+Use motion for:
+- Entering an adventure.
+- Revealing the next challenge.
+- Highlighting countable objects.
+- Showing hints.
+- Updating progress.
+- Completing the activity.
+
+## Performance requirements
+
+- Prefer transforms and opacity for transitions.
+- Avoid excessive simultaneous animation.
+- Avoid unnecessary animation loops.
+- Respect reduced-motion preferences.
+- Do not animate every background object continuously.
+- Avoid blocking input while decorative animations run.
+
+## Accessibility
+
+All animations must be supplementary to the learning task.
+
+Every critical interaction must remain understandable when animations are disabled.
+
+---
+
+# 14. Child Safety, Privacy and Accessibility
+
+Safety is a core product requirement.
+
+## Content safety
+
+- Keep the tutor within the configured learning activity.
+- Use predefined educational content and validated answers.
+- Redirect unsuitable or unrelated requests appropriately.
+- Do not ask children for sensitive personal information.
+- Do not encourage secrecy from parents or caregivers.
+- Do not simulate emotional dependency.
+- Provide a clear route to a trusted adult for concerning disclosures.
+
+## Privacy
+
+- Parent-managed onboarding and consent.
+- Minimal learner data collection.
+- No unnecessary voice-recording retention.
+- Server-side secret management.
+- Appropriate database authorization.
+- Defined data-retention and deletion procedures.
+- No public learner profiles or leaderboards in the MVP.
+
+## Accessibility
+
+- Large touch targets.
+- Keyboard support for adult-facing interfaces.
+- Clear focus indicators.
+- Text alternatives for essential visual information.
+- Captions or text equivalents for important spoken instructions.
+- High contrast for text and essential controls.
+- Reduced-motion support.
+- Visual fallback for voice input.
+
+The application must not assume that every child can hear, speak, read, or interact in the same way.
+
+---
+
+# 15. Testing Strategy
+
+## Functional tests
+
+Verify:
+- The adventure starts.
+- Every challenge displays the expected objects.
+- Correct answers are validated.
+- Incorrect answers produce the right hint.
+- Hints progress in the correct order.
+- Repeated taps cannot accidentally skip activities.
+- Completion produces a correct summary.
+- The parent dashboard reads the correct session data.
+
+## Accessibility tests
+
+Verify:
+- Keyboard navigation.
+- Screen-reader labels.
+- Focus management.
+- Reduced-motion behavior.
+- Touch target sizes.
+- Text contrast.
+
+## Reliability tests
+
+Verify:
+- No microphone permission.
+- Voice service unavailable.
+- Network interruption.
+- Duplicate submission.
+- Page refresh during an activity.
+- Empty progress data.
+- Invalid activity IDs.
+- Repeated answer submissions.
+
+## Educational correctness
+
+Every activity should have explicit learning objectives and known expected answers.
+
+Incorrect responses must not be counted as correct simply because the child eventually completes the activity.
+
+## Acceptance tests
+
+The MVP is acceptable when:
+
+1. A user can start and complete the counting adventure.
+2. All three challenges work correctly.
+3. Visual answer selection works without voice integration.
+4. The hint system responds to incorrect answers.
+5. The activity produces a structured session summary.
+6. The parent dashboard displays real session results or clearly labelled sample data.
+7. The graphs respond to their underlying data.
+8. The UI works on mobile, tablet, and desktop.
+9. No visible control is knowingly left nonfunctional.
+10. There are no exposed secrets or misleading voice-connection states.
+11. There are no critical console errors.
+12. The README documents setup, scripts, environment variables, and limitations.
+
+---
+
+# 16. Implementation Phases
+
+## Phase 1 — Project setup and design system
+
+- Create the Next.js application.
+- Install dependencies.
+- Configure Tailwind CSS and TypeScript.
+- Define design tokens.
+- Create shared buttons, cards, typography, and layout primitives.
+- Build the illustrated explorer home.
+
+**Exit criterion:** the home screen is polished, responsive, and functional.
+
+## Phase 2 — Jungle Counting Adventure
+
+- Create typed activity definitions.
+- Build the activity state machine.
+- Implement all three challenges.
+- Add answer validation.
+- Add progressive hints.
+- Implement character states and transitions.
+- Add activity completion.
+
+**Exit criterion:** the full learning loop works using visual interactions alone.
+
+## Phase 3 — Learning records and parent dashboard
+
+- Define session and attempt types.
+- Record local prototype progress.
+- Build parent overview and skill views.
+- Implement Recharts visualizations.
+- Add loading, empty, and error states.
+
+**Exit criterion:** dashboard data is derived from actual prototype session events.
+
+## Phase 4 — Voice integration
+
+- Verify Bolna's supported integration path.
+- Implement the voice adapter.
+- Connect the configured activity prompts.
+- Handle session lifecycle and failures.
+- Add structured answer handling.
+- Test speech recognition and interruption behavior.
+
+**Exit criterion:** the child can complete the activity through the verified voice workflow, with visual fallback available.
+
+## Phase 5 — Persistence and security
+
+- Configure Supabase.
+- Add parent authentication.
+- Add learner and session persistence.
+- Implement Row Level Security.
+- Validate server-side actions.
+- Test data access and deletion.
+
+**Exit criterion:** learner data is stored and accessed through authenticated, authorized operations.
+
+## Phase 6 — Final polish and demo
+
+- Refine motion and illustrations.
+- Test responsive layouts.
+- Validate educational correctness.
+- Test failure scenarios.
+- Prepare a short demonstration.
+- Document known limitations.
+
+**Exit criterion:** the complete vertical slice is reliable enough to demonstrate without depending on unimplemented features.
+
+---
+
+# 17. Definition of Done
+
+The first release must not be declared complete merely because the home page looks attractive.
+
+The release is complete only when:
+
+- The child can begin a learning adventure.
+- The activity accepts and validates answers.
+- The child receives helpful feedback.
+- The system records the outcome.
+- The completion screen reflects the session.
+- The parent dashboard presents the same session's data.
+- The application remains usable when voice is unavailable.
+- The product respects the specified safety and accessibility requirements.
+
+Any unimplemented production integration must be explicitly documented.
+
+Never claim a live integration, database persistence, or voice interaction works unless it has actually been implemented and tested.
+
+---
+
+# 18. Instructions for Claude Code
+
+You are the senior frontend engineer, product designer, and implementation lead for LittleVerse AI.
+
+Build the product described in this PRD using the existing local development environment.
+
+## Execution rules
+
+1. Inspect the current directory before changing files.
+2. If the directory is empty, scaffold a new Next.js application.
+3. If a project already exists, inspect and preserve its working structure.
+4. Use TypeScript strict mode.
+5. Use Motion for React for intentional interface animation.
+6. Use Recharts for the parent dashboard's data visualizations.
+7. Use Lucide React for interface icons.
+8. Create a cohesive design system instead of styling every component independently.
+9. Build the child-facing explorer and counting adventure before secondary features.
+10. Use typed, structured activity definitions.
+11. Keep learning validation deterministic.
+12. Do not fake a live voice integration.
+13. Do not introduce secrets into client-side code.
+14. Do not add unnecessary dependencies.
+15. Run the available lint, type-check, and build commands.
+16. Fix errors caused by the implementation before declaring the phase complete.
+17. Provide a concise report of created files, working features, test results, and outstanding work.
+
+## Visual quality requirements
+
+The result must look intentionally art-directed.
+
+Avoid:
+- Generic SaaS landing-page layouts.
+- Repeated gradient cards without meaningful illustrations.
+- Emoji as the primary illustration strategy.
+- Excessive glassmorphism.
+- Unnecessary charts in the child interface.
+- Motion that distracts from learning.
+- Dense paragraphs in the child-facing experience.
+- Fake microphone functionality.
+- Decorative controls that do nothing.
+
+Prioritize a distinctive illustrated jungle, a consistent Miko character, clear visual hierarchy, thoughtful animation, and excellent responsive behavior.
+
+## First implementation target
+
+Complete the following in the first implementation cycle:
+
+1. Scaffold the application.
+2. Create the shared design system.
+3. Implement the explorer home screen.
+4. Implement the complete Jungle Counting Adventure.
+5. Implement correct and incorrect answer states.
+6. Implement adaptive hints.
+7. Implement the completion screen.
+8. Implement the parent dashboard with clearly labelled sample data if persistence is not yet connected.
+9. Add responsive behavior and reduced-motion support.
+10. Run the project checks and provide the exact command to launch the application.
+
+Do not attempt every future feature in the first cycle. Produce one complete, polished, functional vertical slice, then proceed to voice integration and persistence.
+
+**Final instruction:** begin by inspecting the environment, then implement the first vertical slice. Do not stop after presenting a plan or generating static mockups. Run the application checks, report the actual result, and identify anything that remains incomplete.
