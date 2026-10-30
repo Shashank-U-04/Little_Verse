@@ -1,4 +1,5 @@
 # LittleVerse AI implementation audit
+> **Superseded (30 Oct 2026):** this audit predates the Bolna integration. See [`docs/DEVELOPER_HANDOFF.md`](docs/DEVELOPER_HANDOFF.md) for the current state.
 
 _Last updated: 2026-10-21_
 
