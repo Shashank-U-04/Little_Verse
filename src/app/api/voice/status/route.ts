@@ -5,11 +5,13 @@ import type { VoiceStatusResponse } from "../../../../lib/voice/voiceStatus.ts";
 
 /** Tells the client which voice is configured without exposing any secret. */
 export async function GET(request: Request): Promise<Response> {
+  // Read the request before anything else: with Cache Components, a GET handler that
+  // never touches the request is prerendered at build time, freezing env and cookie state.
+  const pass = readCookie(request.headers.get("cookie"), VOICE_PASS_COOKIE);
   const config = readVoiceServerConfig();
   const readiness = bolnaReadiness(config);
   let unlocked = !config.accessCodeRequired;
   if (readiness.ready && config.accessCodeRequired) {
-    const pass = readCookie(request.headers.get("cookie"), VOICE_PASS_COOKIE);
     unlocked = verifyVoicePass(pass, config.accessCode!, config.bolna!.apiKey, Date.now());
   }
 
