@@ -8,6 +8,8 @@ type VoiceButtonProps = {
   state: VoiceState;
   onPress: () => void;
   disabled?: boolean;
+  /** Hides the visible caption when a nearby panel already explains the state (e.g. MicHelp). The button's accessible name is unchanged. */
+  hideHint?: boolean;
 };
 
 const labels: Record<VoiceState, string> = {
@@ -30,7 +32,7 @@ const hintText: Record<VoiceState, string> = {
   unavailable: "Voice unavailable — tap a number",
 };
 
-export default function VoiceButton({ state, onPress, disabled }: VoiceButtonProps) {
+export default function VoiceButton({ state, onPress, disabled, hideHint = false }: VoiceButtonProps) {
   const isUnavailable = state === "unavailable";
   const isDisabled = disabled || isUnavailable;
   const isListening = state === "listening";
@@ -161,15 +163,18 @@ export default function VoiceButton({ state, onPress, disabled }: VoiceButtonPro
         </button>
       </div>
 
-      <span
-        className={[
-          "text-center text-sm font-semibold leading-4",
-          isError ? "text-[#FF8A72]" : isUnavailable ? "text-zinc-500" : "text-[#24352B]",
-        ].join(" ")}
-        aria-live="polite"
-      >
-        {hintText[state]}
-      </span>
+      {!hideHint && (
+        <span
+          className={[
+            "text-center text-sm font-semibold leading-4",
+            isError ? "text-[#FF8A72]" : isUnavailable ? "text-zinc-500" : "text-[#24352B]",
+          ].join(" ")}
+          aria-live="polite"
+          data-testid="voice-button-hint"
+        >
+          {hintText[state]}
+        </span>
+      )}
     </div>
   );
 }

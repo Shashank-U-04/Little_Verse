@@ -9,7 +9,9 @@ import JungleScene from "@/components/explorer/JungleScene";
 import CountableObjects from "@/components/adventure/CountableObjects";
 import VoiceButton from "@/components/voice/VoiceButton";
 import VoiceConsentDialog from "@/components/voice/VoiceConsentDialog";
-import { BolnaWebCall } from "@bolna/web-call";
+import MicHelp from "@/components/voice/MicHelp";
+import { browserMicEnvironment, micEnvironmentProblem, micProblemFromBolnaError, micProblemFromMediaError, micProblemFromRecognitionError, type MicProblemKind } from "@/components/voice/micProblem";
+import { BolnaWebCall, type CallError } from "@bolna/web-call";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -98,10 +100,19 @@ export default function JungleCountingPage(){
   const [hasVoiceConsent,setHasVoiceConsent]=useState(false);
   const [consentDialogOpen,setConsentDialogOpen]=useState(false);
   const [voiceNotice,setVoiceNotice]=useState<string|null>(null);
+  // Microphone problems, classified so a grown-up gets the right fix (see MicHelp).
+  const [bolnaCallError,setBolnaCallError]=useState<CallError|null>(null);
+  const [bolnaPreflightProblem,setBolnaPreflightProblem]=useState<MicProblemKind|null>(null);
+  const [recognitionProblem,setRecognitionProblem]=useState<MicProblemKind|null>(null);
   const lessonRef=useRef<LessonPointer>({adventureId:jungleCountingAdventure.id, challengeIndex:0});
   // getSession runs inside call.start() from a click, never during render; it reads the latest challenge.
+  // The extra error listener keeps the SDK's original cause (e.g. NotFoundError), which the adapter summarises.
   // eslint-disable-next-line react-hooks/refs
-  const [bolnaAdapter]=useState(()=>new BolnaCallAdapter(()=>new BolnaWebCall({getSession:()=>requestBolnaSession(lessonRef.current)})));
+  const [bolnaAdapter]=useState(()=>new BolnaCallAdapter(()=>{
+    const call=new BolnaWebCall({getSession:()=>requestBolnaSession(lessonRef.current)});
+    call.on("error",(error)=>setBolnaCallError(error));
+    return call;
+  }));
   const [speechController]=useState(()=>new BrowserSpeechController({
     isAudioOwned:()=>bolnaAdapter.ownsAudio(),
     isEnabled:()=>tutorVoiceRef.current==="device",
@@ -289,16 +300,17 @@ export default function JungleCountingPage(){
     if(!SR){ releaseMicrophone("browser-recognition"); setVoiceState("unavailable"); setVoiceError("Voice isn't available on this device \u2014 tap a number instead."); return; }
     const generation=++recognitionGenerationRef.current;
     stopSpeaking();
-    setVoiceState("requesting_permission"); setVoiceError(null); setMikoState("listening");
+    setVoiceState("requesting_permission"); setVoiceError(null); setRecognitionProblem(null); setMikoState("listening");
     voiceInputLockRef.current=true;
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
       if(generation!==recognitionGenerationRef.current){ stream.getTracks().forEach(t=>t.stop()); releaseMicrophone("browser-recognition"); return; }
       mediaStreamRef.current=stream; stream.getTracks().forEach(t=>t.stop()); mediaStreamRef.current=null;
-    }catch{
+    }catch(error){
       releaseMicrophone("browser-recognition");
       if(generation!==recognitionGenerationRef.current) return;
       voiceInputLockRef.current=false;
+      setRecognitionProblem(micProblemFromMediaError(error));
       setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); setMikoState("encouraging"); return;
     }
     if(generation!==recognitionGenerationRef.current){ releaseMicrophone("browser-recognition"); return; }
@@ -331,6 +343,7 @@ export default function JungleCountingPage(){
       if(generation!==recognitionGenerationRef.current) return;
       const err=(ev as {error?:string})?.error ?? "unknown";
       voiceInputLockRef.current=false;
+      setRecognitionProblem(micProblemFromRecognitionError(err));
       if(err==="not-allowed"||err==="permission-denied"){ setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); }
       else if(err==="no-speech"){ setVoiceState("idle"); setFeedback({type:"encourage", text:"I didn't hear anything \u2014 try again or tap a number!"}); setMikoState("encouraging"); }
       else { setVoiceState("error"); setVoiceError("Something went wrong \u2014 tap a number instead."); }
@@ -365,6 +378,11 @@ export default function JungleCountingPage(){
     setTutorVoice("bolna");
   },[setTutorVoice,stopSpeaking]);
   const handleBolnaStart=useCallback(()=>{
+    setBolnaCallError(null);
+    // A browser that cannot capture audio at all gets clear help instead of a session it cannot use.
+    const environmentProblem=micEnvironmentProblem(browserMicEnvironment());
+    setBolnaPreflightProblem(environmentProblem);
+    if(environmentProblem) return;
     if(needsGrownUp){ setVoiceNotice(null); setConsentDialogOpen(true); return; }
     if(microphoneOwner!==null || recognitionRef.current || voiceState==="requesting_permission"){
       setVoiceError("Finish voice answer capture before starting a conversation.");
@@ -405,9 +423,13 @@ export default function JungleCountingPage(){
     if(voiceState==="idle"&&!hasVoiceConsent){ setVoiceNotice(null); setConsentDialogOpen(true); return; }
     if(voiceState==="idle"){ void startRecognition(); return; }
     if(voiceState==="listening"){ try{recognitionRef.current?.stop();}catch{} voiceInputLockRef.current=false; setVoiceState("idle"); setMikoState("idle"); return; }
-    if(voiceState==="error"){ setVoiceState("idle"); setVoiceError(null); setMikoState("idle"); return; }
+    if(voiceState==="error"){ setVoiceState("idle"); setVoiceError(null); setRecognitionProblem(null); setMikoState("idle"); return; }
     if(voiceState==="requesting_permission"||voiceState==="processing"||voiceState==="speaking") return;
   },[bolnaAdapter,hasVoiceConsent,voiceState,startRecognition]);
+  const retryRecognition=useCallback(()=>{
+    setVoiceError(null); setRecognitionProblem(null);
+    void startRecognition();
+  },[startRecognition]);
   if(!session||!ch){
     return (
       <div className="min-h-dvh jungle-soft-gradient flex flex-col">
@@ -426,6 +448,8 @@ export default function JungleCountingPage(){
   }
   const attemptsForThis=session.attempts.filter(a=>a.challengeId===ch.id).length;
   const bolnaOwnsAudio=bolnaAdapter.ownsAudio();
+  // Session refusals (locked, rate limited, not set up) keep the adapter's specific message instead.
+  const bolnaMicProblem=bolnaPreflightProblem ?? (bolnaSnapshot.state==="error"?micProblemFromBolnaError(bolnaCallError):null);
   return (
     <div className="min-h-dvh jungle-soft-gradient flex flex-col">
       <header className="sticky top-0 z-20 border-b border-[#205C43]/10 bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -520,12 +544,16 @@ export default function JungleCountingPage(){
                       ))}
                       {bolnaSnapshot.state==="active" && <p className="max-w-xs text-center text-xs text-[#53645B]">Talk with Miko, and tap a number on the screen to answer.</p>}
                       {!voiceStatus.bolnaReady && <p className="max-w-xs text-center text-xs text-[#53645B]">Miko&apos;s voice isn&apos;t available here right now. Tapping the numbers works great!</p>}
-                      {bolnaSnapshot.error && <p className="max-w-xs text-center text-xs font-semibold text-[#B4442F]" role="alert">{bolnaSnapshot.error}</p>}
+                      {bolnaMicProblem
+                        ? <MicHelp problem={bolnaMicProblem} onRetry={bolnaMicProblem==="unsupported"?undefined:handleBolnaStart}/>
+                        : bolnaSnapshot.error && <p className="max-w-xs text-center text-xs font-semibold text-[#B4442F]" role="alert">{bolnaSnapshot.error}</p>}
                     </div>
                   )}
                   {voiceNotice && <p className="max-w-xs text-center text-xs font-semibold text-[#205C43]" role="status">{voiceNotice}</p>}
-                  <VoiceButton state={voiceState} onPress={handleVoicePress} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
-                  {voiceError && voiceState==="error" && <p className="max-w-[28ch] text-center text-xs font-semibold leading-4 text-[#FF8A72]" role="alert">{voiceError}</p>}
+                  <VoiceButton state={voiceState} onPress={handleVoicePress} hideHint={voiceState==="error"&&recognitionProblem!==null} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
+                  {voiceState==="error" && (recognitionProblem
+                    ? <MicHelp problem={recognitionProblem} onRetry={recognitionProblem==="unsupported"?undefined:retryRecognition}/>
+                    : voiceError && <p className="max-w-[28ch] text-center text-xs font-semibold leading-4 text-[#FF8A72]" role="alert">{voiceError}</p>)}
                   {voiceState==="unavailable" && <p className="max-w-[28ch] text-center text-xs font-medium leading-4 text-zinc-500">Voice isn&apos;t available on this device {"—"} tapping a number works great!</p>}
                   {voiceStatus!==null && voiceStatus.provider!=="browser" && (tutorVoice==="device" ? (
                     <p className="max-w-xs text-center text-xs text-[#53645B]">
