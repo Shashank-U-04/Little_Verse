@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+
+# local tooling and stray artifacts (kept on disk, never committed)
+/.kilo/
+/littleverse/
+/nul
+/omnirush-session-*.html
+
+# allow the placeholder env template
+!.env.example
