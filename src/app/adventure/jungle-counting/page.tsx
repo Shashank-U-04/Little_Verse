@@ -550,7 +550,7 @@ export default function JungleCountingPage(){
                     </div>
                   )}
                   {voiceNotice && <p className="max-w-xs text-center text-xs font-semibold text-[#205C43]" role="status">{voiceNotice}</p>}
-                  <VoiceButton state={voiceState} onPress={handleVoicePress} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
+                  <VoiceButton state={voiceState} onPress={handleVoicePress} hideHint={voiceState==="error"&&recognitionProblem!==null} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
                   {voiceState==="error" && (recognitionProblem
                     ? <MicHelp problem={recognitionProblem} onRetry={recognitionProblem==="unsupported"?undefined:retryRecognition}/>
                     : voiceError && <p className="max-w-[28ch] text-center text-xs font-semibold leading-4 text-[#FF8A72]" role="alert">{voiceError}</p>)}

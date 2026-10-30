@@ -301,6 +301,18 @@ test("permission denial leaves tap answers available", async ({ page }) => {
   await expect(help).toContainText("The microphone is blocked");
   await expect(help).toContainText("choose Allow");
   await expect(help.getByRole("button", { name: "Try again" })).toBeVisible();
+
+  // Only the panel shows "Try again"; the mic button keeps its accessible name and keyboard access.
+  await expect(page.getByTestId("voice-button-hint")).toHaveCount(0);
+  await expect(page.getByText("Try again", { exact: true })).toHaveCount(1);
+  const micButton = page.getByRole("button", { name: "Error — try again" });
+  await expect(micButton).toBeEnabled();
+  await micButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(help).toHaveCount(0);
+  await expect(page.getByTestId("voice-button-hint")).toHaveText("Tap to answer");
+  await expect(page.getByRole("button", { name: /activate microphone/i })).toBeVisible();
+
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
 });
