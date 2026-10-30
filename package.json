@@ -7,10 +7,11 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/learning.test.ts",
+    "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@bolna/web-call": "3.0.1",
     "@eslint/eslintrc": "^3.3.7",
     "@reduxjs/toolkit": "^2.13.0",
     "ajv": "^6.15.0",

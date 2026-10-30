@@ -14,6 +14,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { jungleCountingAdventure } from "@/features/learning/activities";
 import { getHint, parseVoiceAnswer, validateAnswer } from "@/features/learning/validation";
 import { createNewSession, saveSession } from "@/lib/storage";
+import { BolnaCallAdapter, type BolnaUiSnapshot } from "@/lib/bolna/bolnaCallAdapter";
+import { MicrophoneOwnership } from "@/lib/voice/microphoneOwnership";
+import { BrowserSpeechController, type SpeechUtterancePort } from "@/lib/voice/browserSpeechController";
 import type { Challenge, MikoState, Session, VoiceState } from "@/features/learning/types";
 type SpeechRecognitionEventLike = {
   results: ArrayLike<ArrayLike<{ transcript?: string }>>;
@@ -58,7 +61,8 @@ export default function JungleCountingPage(){
   const [showNext,setShowNext]=useState(false);
   const [revealAnswer,setRevealAnswer]=useState(false);
   const [voiceError,setVoiceError]=useState<string|null>(null);
-  const speakTimeoutRef=useRef<number|null>(null);
+  const [bolnaSnapshot,setBolnaSnapshot]=useState<BolnaUiSnapshot>({state:"idle",error:null});
+  const [microphoneOwner,setMicrophoneOwner]=useState<"browser-recognition"|"bolna-call"|null>(null);
   const advanceTimeoutRef=useRef<number|null>(null);
   const resetSelectedTimeoutRef=useRef<number|null>(null);
   const recognitionRef=useRef<SpeechRecognitionLike|null>(null);
@@ -68,34 +72,66 @@ export default function JungleCountingPage(){
   const sessionInitializedRef=useRef(false);
   const voiceParseTimeoutRef=useRef<number|null>(null);
   const voiceInputLockRef=useRef(false);
+  const [bolnaAdapter]=useState(()=>new BolnaCallAdapter());
+  const [speechController]=useState(()=>new BrowserSpeechController({
+    isAudioOwned:()=>bolnaAdapter.ownsAudio(),
+    getSynthesis:()=>{
+      if(typeof window==="undefined"||!("speechSynthesis" in window)) return null;
+      return {
+        cancel:()=>window.speechSynthesis.cancel(),
+        speak:(utterance)=>window.speechSynthesis.speak(utterance as SpeechSynthesisUtterance),
+      };
+    },
+    createUtterance:(text)=>new SpeechSynthesisUtterance(text) as unknown as SpeechUtterancePort,
+    timers:{
+      setTimeout:(callback,delayMs)=>window.setTimeout(callback,delayMs),
+      clearTimeout:(timerId)=>window.clearTimeout(timerId),
+    },
+    onStart:()=>{
+      setMikoState("speaking");
+      setVoiceState((current)=>current==="unavailable"||current==="error"?current:"speaking");
+    },
+    onFinish:()=>{
+      setMikoState((current)=>current==="speaking"?"idle":current);
+      setVoiceState((current)=>current==="speaking"?"idle":current);
+    },
+  }));
+  const microphoneOwnershipRef=useRef(new MicrophoneOwnership());
+  const recognitionGenerationRef=useRef(0);
+  const tapSubmissionPendingRef=useRef(false);
   const ch: Challenge|undefined = challenges[idx];
+  const claimMicrophone=useCallback((owner:"browser-recognition"|"bolna-call")=>{
+    const claimed=microphoneOwnershipRef.current.claim(owner);
+    if(claimed) setMicrophoneOwner(owner);
+    return claimed;
+  },[]);
+  const releaseMicrophone=useCallback((owner:"browser-recognition"|"bolna-call")=>{
+    microphoneOwnershipRef.current.release(owner);
+    setMicrophoneOwner(microphoneOwnershipRef.current.current);
+  },[]);
   const isLast = idx===challenges.length-1;
   const wasCorrect = feedback?.type==="correct";
   const highlighted = wasCorrect ? (ch?.objectCount??0) : revealAnswer ? (ch?.objectCount??0) : computeHighlighted(ch as Challenge, hintLevel, false) || 0;
   const speak=useCallback((text:string)=>{
-    if(typeof window==="undefined"||!("speechSynthesis" in window)) return;
-    try{
-      window.speechSynthesis.cancel();
-      const utter=new SpeechSynthesisUtterance(text);
-      utter.lang="en-US"; utter.rate=0.95; utter.pitch=1.02;
-      setMikoState("speaking");
-      setVoiceState((current)=>current==="unavailable"||current==="error"?current:"speaking");
-      utter.onend=()=>{
-        setMikoState((p)=>p==="speaking"?"idle":p);
-        setVoiceState((current)=>current==="speaking"?"idle":current);
-      };
-      utter.onerror=()=>{
-        setMikoState("idle");
-        setVoiceState((current)=>current==="speaking"?"idle":current);
-      };
-      window.speechSynthesis.speak(utter);
-    }catch{}
-  },[]);
+    speechController.speak(text);
+  },[speechController]);
+  const scheduleSpeech=useCallback((text:string,delayMs:number)=>speechController.schedule(text,delayMs),[speechController]);
   const stopSpeaking=useCallback(()=>{
-    if(typeof window!=="undefined"&&"speechSynthesis" in window) window.speechSynthesis.cancel();
+    speechController.cancelAll();
     setMikoState("idle");
     setVoiceState((current)=>current==="speaking"?"idle":current);
-  },[]);
+  },[speechController]);
+  useEffect(()=>bolnaAdapter.subscribe((snapshot)=>{
+    setBolnaSnapshot(snapshot);
+    if(bolnaAdapter.ownsAudio()){
+      stopSpeaking();
+      return;
+    }
+    if(snapshot.state==="ended"||snapshot.state==="error"){
+      stopSpeaking();
+      releaseMicrophone("bolna-call");
+    }
+  }),[bolnaAdapter,releaseMicrophone,stopSpeaking]);
   useEffect(()=>{
     if(!sessionInitializedRef.current){
       sessionInitializedRef.current=true;
@@ -109,7 +145,6 @@ export default function JungleCountingPage(){
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setVoiceState(hasRec?"idle":"unavailable");
     return()=>{
-      if(speakTimeoutRef.current) window.clearTimeout(speakTimeoutRef.current);
       if(advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
       if(resetSelectedTimeoutRef.current) window.clearTimeout(resetSelectedTimeoutRef.current);
       if(voiceParseTimeoutRef.current) window.clearTimeout(voiceParseTimeoutRef.current);
@@ -119,16 +154,14 @@ export default function JungleCountingPage(){
       stopSpeaking();
       if(recognitionRef.current){ try{recognitionRef.current.abort();}catch{}}
       if(mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach(t=>t.stop());
+      bolnaAdapter.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>{
     if(!ch) return;
-    if(speakTimeoutRef.current) window.clearTimeout(speakTimeoutRef.current);
-    const t=window.setTimeout(()=>speak(ch.prompt),400);
-    speakTimeoutRef.current=t as unknown as number;
-    return()=>window.clearTimeout(t);
-  },[idx,ch,speak]);
+    return scheduleSpeech(ch.prompt,400);
+  },[idx,ch,scheduleSpeech]);
   const submitAnswer=useCallback((n:number, via:"tap"|"voice")=>{
     if(!ch||!session) return;
     // React batches pointer events, so a state-only guard can still allow two
@@ -146,7 +179,7 @@ export default function JungleCountingPage(){
       if(advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
       const t=window.setTimeout(()=>setShowNext(true),1200);
       advanceTimeoutRef.current=t as unknown as number;
-      window.setTimeout(()=>speak(pickCelebration()),200);
+      scheduleSpeech(pickCelebration(),200);
     } else {
       const currentHint=hintLevel;
       const lastHintIndex=Math.max(0,ch.hintSequence.length-1);
@@ -160,11 +193,12 @@ export default function JungleCountingPage(){
       if(resetSelectedTimeoutRef.current) window.clearTimeout(resetSelectedTimeoutRef.current);
       const rt=window.setTimeout(()=>setSelected(null),900);
       resetSelectedTimeoutRef.current=rt as unknown as number;
-      window.setTimeout(()=>speak(hintText),250);
+      scheduleSpeech(hintText,250);
     }
-  },[ch,session,isBusy,feedback,hintLevel,showNext,speak,stopSpeaking]);
+  },[ch,session,isBusy,feedback,hintLevel,showNext,scheduleSpeech,stopSpeaking]);
   const handleNext=useCallback(()=>{
     if(!ch||!session) return;
+    if(bolnaAdapter.ownsAudio()) return;
     if(!feedback||feedback.type!=="correct" || advanceLockRef.current) return;
     advanceLockRef.current=true;
     stopSpeaking();
@@ -179,44 +213,54 @@ export default function JungleCountingPage(){
     advanceLockRef.current=false;
     if(advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
     if(resetSelectedTimeoutRef.current) window.clearTimeout(resetSelectedTimeoutRef.current);
-  },[ch,session,feedback,isLast,router,stopSpeaking]);
+  },[bolnaAdapter,ch,session,feedback,isLast,router,stopSpeaking]);
   const handleReveal=useCallback(()=>{
-    if(!ch) return;
+    if(!ch||bolnaAdapter.ownsAudio()) return;
     setRevealAnswer(true); setHintLevel(ch.hintSequence.length-1);
     const objectLabel=ch.objectType==="butterfly"?"butterflies":`${ch.objectType}s`;
     const txt=`There are ${ch.objectCount} ${objectLabel}. Let's count \u2014 ${Array.from({length:ch.objectCount},(_,i)=>String(i+1)).join(", ")}! Now you try.`;
     setFeedback({type:"hint", text:txt}); setMikoState("encouraging"); speak(txt);
-  },[ch,speak]);
+  },[bolnaAdapter,ch,speak]);
   const handleObjectTap=useCallback((i:number)=>{
     setTappedIndices(prev=>{ const n=new Set(prev); if(n.has(i)) n.delete(i); else n.add(i); return n; });
   },[]);
   const startRecognition=useCallback(async()=>{
-    if(!ch) return;
+    if(!ch || bolnaAdapter.ownsAudio()) return;
+    if(!claimMicrophone("browser-recognition")) return;
     const SR: SpeechRecognitionConstructor | undefined = typeof window!=="undefined" ? (window.SpeechRecognition||window.webkitSpeechRecognition) : undefined;
-    if(!SR){ setVoiceState("unavailable"); setVoiceError("Voice isn't available on this device \u2014 tap a number instead."); return; }
+    if(!SR){ releaseMicrophone("browser-recognition"); setVoiceState("unavailable"); setVoiceError("Voice isn't available on this device \u2014 tap a number instead."); return; }
+    const generation=++recognitionGenerationRef.current;
+    stopSpeaking();
     setVoiceState("requesting_permission"); setVoiceError(null); setMikoState("listening");
     voiceInputLockRef.current=true;
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      if(generation!==recognitionGenerationRef.current){ stream.getTracks().forEach(t=>t.stop()); releaseMicrophone("browser-recognition"); return; }
       mediaStreamRef.current=stream; stream.getTracks().forEach(t=>t.stop()); mediaStreamRef.current=null;
     }catch{
+      releaseMicrophone("browser-recognition");
+      if(generation!==recognitionGenerationRef.current) return;
       voiceInputLockRef.current=false;
       setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); setMikoState("encouraging"); return;
     }
+    if(generation!==recognitionGenerationRef.current){ releaseMicrophone("browser-recognition"); return; }
     let rec: SpeechRecognitionLike;
     try{
       // construct via window SR
       rec=new SR();
     }catch{
+      releaseMicrophone("browser-recognition");
       voiceInputLockRef.current=false;
       setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); return;
     }
     recognitionRef.current=rec; rec.lang="en-US"; rec.interimResults=false; rec.maxAlternatives=1; rec.continuous=false;
     setVoiceState("listening");
     rec.onresult=(e)=>{
+      if(generation!==recognitionGenerationRef.current) return;
       const transcript: string = e.results[0]?.[0]?.transcript ?? "";
       setVoiceState("processing"); setMikoState("thinking");
       voiceParseTimeoutRef.current=window.setTimeout(()=>{
+        if(generation!==recognitionGenerationRef.current) return;
         voiceInputLockRef.current=false;
         const parsed=parseVoiceAnswer(transcript);
         if(parsed===null){
@@ -226,6 +270,7 @@ export default function JungleCountingPage(){
       },350);
     };
     rec.onerror=(ev)=>{
+      if(generation!==recognitionGenerationRef.current) return;
       const err=(ev as {error?:string})?.error ?? "unknown";
       voiceInputLockRef.current=false;
       if(err==="not-allowed"||err==="permission-denied"){ setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); }
@@ -233,15 +278,59 @@ export default function JungleCountingPage(){
       else { setVoiceState("error"); setVoiceError("Something went wrong \u2014 tap a number instead."); }
       setMikoState(s=> (s==="listening"||s==="thinking"?"idle":s));
     };
-    rec.onend=()=>{ setVoiceState(prev=>prev==="listening"?"idle":prev); setMikoState(s=>s==="listening"?"idle":s); recognitionRef.current=null; };
-    try{ rec.start(); }catch{ voiceInputLockRef.current=false; setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); recognitionRef.current=null; }
-  },[ch,speak,submitAnswer]);
+    rec.onend=()=>{
+      releaseMicrophone("browser-recognition");
+      if(generation!==recognitionGenerationRef.current) return;
+      setVoiceState(prev=>prev==="listening"?"idle":prev);
+      setMikoState(s=>s==="listening"?"idle":s);
+      recognitionRef.current=null;
+    };
+    try{ rec.start(); }catch{ releaseMicrophone("browser-recognition"); voiceInputLockRef.current=false; setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); recognitionRef.current=null; }
+  },[bolnaAdapter,ch,speak,stopSpeaking,submitAnswer,claimMicrophone,releaseMicrophone]);
+  const handleBolnaStart=useCallback(()=>{
+    if(microphoneOwner!==null || recognitionRef.current || voiceState==="requesting_permission"){
+      setVoiceError("Finish voice answer capture before starting a conversation.");
+      return;
+    }
+    if(!claimMicrophone("bolna-call")) return;
+    stopSpeaking();
+    setVoiceError(null);
+    // Call start synchronously from this click so the browser preserves its
+    // user-gesture permission for microphone and audio playback.
+    void bolnaAdapter.start().catch(()=>{
+      releaseMicrophone("bolna-call");
+      setBolnaSnapshot(bolnaAdapter.getSnapshot());
+    });
+  },[bolnaAdapter,claimMicrophone,microphoneOwner,releaseMicrophone,stopSpeaking,voiceState]);
+  const handleBolnaStop=useCallback(()=>{
+    void bolnaAdapter.stop().catch(()=>setBolnaSnapshot(bolnaAdapter.getSnapshot()));
+  },[bolnaAdapter]);
+  const handleTapAnswer=useCallback((n:number)=>{
+    if(tapSubmissionPendingRef.current) return;
+    const cancelRecognition=()=>{
+      recognitionGenerationRef.current++;
+      voiceInputLockRef.current=false;
+      if(voiceParseTimeoutRef.current){ window.clearTimeout(voiceParseTimeoutRef.current); voiceParseTimeoutRef.current=null; }
+      if(recognitionRef.current){ try{recognitionRef.current.abort();}catch{} }
+      setVoiceState((current)=>current==="unavailable"?current:"idle");
+      setMikoState((current)=>current==="listening"||current==="thinking"?"idle":current);
+    };
+    cancelRecognition();
+    const submit=()=>{ tapSubmissionPendingRef.current=false; submitAnswer(n,"tap"); };
+    if(microphoneOwner==="bolna-call"){
+      tapSubmissionPendingRef.current=true;
+      void bolnaAdapter.stop().catch(()=>undefined).finally(submit);
+      return;
+    }
+    submit();
+  },[bolnaAdapter,microphoneOwner,submitAnswer]);
   const handleVoicePress=useCallback(()=>{
+    if(bolnaAdapter.ownsAudio()) return;
     if(voiceState==="idle"){ void startRecognition(); return; }
     if(voiceState==="listening"){ try{recognitionRef.current?.stop();}catch{} voiceInputLockRef.current=false; setVoiceState("idle"); setMikoState("idle"); return; }
     if(voiceState==="error"){ setVoiceState("idle"); setVoiceError(null); setMikoState("idle"); return; }
     if(voiceState==="requesting_permission"||voiceState==="processing"||voiceState==="speaking") return;
-  },[voiceState,startRecognition]);
+  },[bolnaAdapter,voiceState,startRecognition]);
   if(!session||!ch){
     return (
       <div className="min-h-dvh jungle-soft-gradient flex flex-col">
@@ -259,6 +348,7 @@ export default function JungleCountingPage(){
     );
   }
   const attemptsForThis=session.attempts.filter(a=>a.challengeId===ch.id).length;
+  const bolnaOwnsAudio=bolnaAdapter.ownsAudio();
   return (
     <div className="min-h-dvh jungle-soft-gradient flex flex-col">
       <header className="sticky top-0 z-20 border-b border-[#205C43]/10 bg-white/85 backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -288,7 +378,7 @@ export default function JungleCountingPage(){
                   <Miko state={mikoState} size="md" message={feedback?.text ?? (mikoState==="listening"?"I'm listening \u2014 say a number!":mikoState==="thinking"?"Hmm, let me think\u2026":undefined)} />
                   <div className="mt-3 flex w-full flex-col items-center gap-2 text-center">
                     <h1 className="text-balance text-[22px] font-extrabold leading-tight tracking-tight text-[#24352B] sm:text-[24px]">{ch.prompt}</h1>
-                    <button type="button" onClick={()=>speak(ch.prompt)} className="inline-flex items-center gap-1.5 rounded-full border border-[#205C43]/15 bg-[#205C43]/[0.06] px-3 py-1.5 text-xs font-semibold text-[#205C43] hover:bg-[#205C43]/10 active:bg-[#205C43]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43] focus-visible:ring-offset-2" aria-label="Hear again — repeat the question"><Volume2 className="h-3.5 w-3.5" aria-hidden/> Hear again</button>
+                    <button type="button" onClick={()=>speak(ch.prompt)} disabled={bolnaOwnsAudio} className="inline-flex items-center gap-1.5 rounded-full border border-[#205C43]/15 bg-[#205C43]/[0.06] px-3 py-1.5 text-xs font-semibold text-[#205C43] hover:bg-[#205C43]/10 active:bg-[#205C43]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Hear again — repeat the question"><Volume2 className="h-3.5 w-3.5" aria-hidden/> Hear again</button>
                   </div>
                 </div>
                 <div className="mt-6 rounded-3xl border border-[#FFF4D6] bg-[#FFF8E9]/60 p-4 sm:p-5">
@@ -324,7 +414,7 @@ export default function JungleCountingPage(){
                     const showCorrect=wasCorrect&&isCorrectOption;
                     const showWrong=isSelected&&feedback?.type!=="correct"&&n!==ch.expectedAnswer;
                     return (
-                      <button key={n} type="button" aria-label={`Answer ${n}`} aria-pressed={isSelected} disabled={isBusy&&!!wasCorrect} onClick={()=>submitAnswer(n,"tap")} className={["relative flex min-h-14 items-center justify-center rounded-2xl border-2 text-xl font-extrabold leading-none transition-all","focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43] focus-visible:ring-offset-2 focus-visible:ring-offset-white","active:scale-[0.98] select-none", showCorrect?"border-[#205C43] bg-[#205C43] text-white shadow-[0_6px_16px_rgba(32,92,67,0.30)]":showWrong?"border-[#FF8A72]/40 bg-[#FFE4DE] text-[#8a3a2a]":isSelected?"border-[#FFD166] bg-[#FFF4D6] text-[#7a5a00]":"border-[#205C43]/15 bg-white text-[#205C43] hover:border-[#205C43]/25 hover:bg-[#FFF8E9] shadow-sm", isBusy&&wasCorrect?"cursor-default opacity-100":"cursor-pointer"].join(" ")} style={{touchAction:"manipulation"}}>
+                      <button key={n} type="button" aria-label={`Answer ${n}`} aria-pressed={isSelected} disabled={isBusy&&!!wasCorrect} onClick={()=>handleTapAnswer(n)} className={["relative flex min-h-14 items-center justify-center rounded-2xl border-2 text-xl font-extrabold leading-none transition-all","focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43] focus-visible:ring-offset-2 focus-visible:ring-offset-white","active:scale-[0.98] select-none", showCorrect?"border-[#205C43] bg-[#205C43] text-white shadow-[0_6px_16px_rgba(32,92,67,0.30)]":showWrong?"border-[#FF8A72]/40 bg-[#FFE4DE] text-[#8a3a2a]":isSelected?"border-[#FFD166] bg-[#FFF4D6] text-[#7a5a00]":"border-[#205C43]/15 bg-white text-[#205C43] hover:border-[#205C43]/25 hover:bg-[#FFF8E9] shadow-sm", isBusy&&wasCorrect?"cursor-default opacity-100":"cursor-pointer"].join(" ")} style={{touchAction:"manipulation"}}>
                         <span>{n}</span>
                         {showCorrect && <CheckCircle2 className="absolute right-2 top-2 h-4 w-4 text-white/90" aria-hidden/>}
                       </button>
@@ -333,20 +423,33 @@ export default function JungleCountingPage(){
                 </div>
                 {hintLevel>=2 && !wasCorrect && !revealAnswer && attemptsForThis>=2 && (
                   <div className="mt-3 flex justify-center">
-                    <button type="button" onClick={handleReveal} className="text-xs font-semibold text-[#205C43] underline decoration-[#FFD166] decoration-2 underline-offset-4 hover:text-[#123D30] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] rounded-full px-2 py-1">See the answer — show me how to count</button>
+                    <button type="button" onClick={handleReveal} disabled={bolnaOwnsAudio} className="text-xs font-semibold text-[#205C43] underline decoration-[#FFD166] decoration-2 underline-offset-4 hover:text-[#123D30] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD166] rounded-full px-2 py-1 disabled:cursor-not-allowed disabled:opacity-50">See the answer — show me how to count</button>
                   </div>
                 )}
                 <div className="mt-6 flex flex-col items-center gap-3">
                   <div className="flex w-full items-center gap-3"><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/><span className="text-[11px] font-bold uppercase tracking-widest text-[#53645B]">or speak</span><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/></div>
-                  <VoiceButton state={voiceState} onPress={handleVoicePress} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"}/>
+                  <VoiceButton state={voiceState} onPress={handleVoicePress} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
                   {voiceError && voiceState==="error" && <p className="max-w-[28ch] text-center text-xs font-semibold leading-4 text-[#FF8A72]" role="alert">{voiceError}</p>}
                   {voiceState==="unavailable" && <p className="max-w-[28ch] text-center text-xs font-medium leading-4 text-zinc-500">Voice isn&apos;t available on this device \u2014 tapping a number works great!</p>}
+                  <div className="flex flex-col items-center gap-2 pt-2">
+                    {bolnaSnapshot.state==="idle"||bolnaSnapshot.state==="ended"||(bolnaSnapshot.state==="error"&&microphoneOwner!=="bolna-call") ? (
+                      <Button type="button" variant="secondary" onClick={handleBolnaStart} disabled={microphoneOwner!==null||voiceState==="requesting_permission"||voiceState==="processing"} aria-label="Start a conversation with Miko">Start conversation with Miko</Button>
+                    ) : bolnaSnapshot.state==="ending" ? (
+                      <Button type="button" variant="secondary" disabled>Ending conversation…</Button>
+                    ) : (
+                      <Button type="button" variant="coral" onClick={handleBolnaStop}>{bolnaSnapshot.state==="error"?"Retry ending conversation":bolnaSnapshot.state==="requesting_permission"||bolnaSnapshot.state==="connecting"?"Cancel conversation":"End conversation"}</Button>
+                    )}
+                    <p className="max-w-xs text-center text-xs text-[#53645B]" aria-live="polite">
+                      {bolnaSnapshot.state==="requesting_permission"?"Waiting for microphone permission…":bolnaSnapshot.state==="connecting"?"Connecting to Miko…":bolnaSnapshot.state==="active"?"Miko is speaking with you. End the conversation before using voice answers.":bolnaSnapshot.state==="ending"?"Releasing microphone…":bolnaSnapshot.state==="error"&&microphoneOwner==="bolna-call"?"Microphone release is unconfirmed. Retry ending the conversation.":"Talk with Miko, then use the separate voice button to answer."}
+                    </p>
+                    {bolnaSnapshot.error && <p className="max-w-xs text-center text-xs font-semibold text-[#FF8A72]" role="alert">{bolnaSnapshot.error}</p>}
+                  </div>
                 </div>
                 <div className="mt-6 flex justify-center">
                   <AnimatePresence>
                     {showNext && wasCorrect && (
                       <motion.div initial={{opacity:0,y:8,scale:0.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:8}} transition={{type:"spring",stiffness:400,damping:24}} className="w-full sm:w-auto">
-                        <Button size="xl" variant="primary" onClick={handleNext} className="w-full sm:w-auto sm:min-w-[220px]" aria-label={isLast?"Finish adventure":"Go to next challenge"}>{isLast?"Finish adventure":"Next challenge"}<Sparkles className="h-5 w-5" aria-hidden/></Button>
+                        <Button size="xl" variant="primary" onClick={handleNext} disabled={bolnaOwnsAudio} className="w-full sm:w-auto sm:min-w-[220px]" aria-label={isLast?"Finish adventure":"Go to next challenge"}>{isLast?"Finish adventure":"Next challenge"}<Sparkles className="h-5 w-5" aria-hidden/></Button>
                       </motion.div>
                     )}
                   </AnimatePresence>
