@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/check-build-css.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts tests/voiceServer.test.ts tests/micProblem.test.ts",
@@ -30,6 +30,7 @@
     "@axe-core/playwright": "^4.14.0",
     "@babel/types": "^7.29.8",
     "@playwright/test": "^1.64.1",
+    "@tailwindcss/postcss": "4.3.3",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
