@@ -358,7 +358,8 @@ Use the **deployed production URL**, desktop **Chrome** with **headphones** (ech
 git clone https://github.com/Shashank-U-04/Little_Verse.git
 cd Little_Verse
 git fetch origin
-git checkout -b feat/bolna-backend origin/feat/bolna-primary-voice   # NOT from main
+git checkout --no-track -b feat/bolna-backend origin/feat/bolna-primary-voice   # NOT from main
+git push -u origin feat/bolna-backend   # first push creates your own remote branch
 npm ci
 ```
 
