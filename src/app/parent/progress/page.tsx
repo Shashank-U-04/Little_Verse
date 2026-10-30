@@ -153,7 +153,7 @@ export default function ParentProgressPage(): React.ReactElement {
           <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#24352B]/85">Skill-level evidence and challenge outcomes</p>
         </div>
         <Card>
-          <CardContent className="py-10 text-center text-sm text-[#24352B]/85">Loading progress\u2026</CardContent>
+          <CardContent className="py-10 text-center text-sm text-[#24352B]/85">Loading progress…</CardContent>
         </Card>
       </div>
     );

@@ -98,8 +98,8 @@ export default function VoiceConsentDialog({ open, needsAccessCode, onCancel, on
             addresses or other personal details.
           </p>
           <p>
-            <strong>Answer with my voice</strong> uses your browser&apos;s speech recognition. In Chrome, that audio is sent to
-            Google.
+            The round microphone button (<strong>Tap to answer</strong>) uses your browser&apos;s speech recognition. In
+            Chrome, that audio is sent to Google.
           </p>
           <p className="rounded-2xl border border-[#C8E6C9] bg-[#E8F5E9] px-3.5 py-3 text-[#205C43]">
             <strong>LittleVerse itself stores no audio and no transcripts.</strong> It saves only answers, hints used and times,

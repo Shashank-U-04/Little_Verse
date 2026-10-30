@@ -216,7 +216,7 @@ export default function ParentSettingsPage(): React.ReactElement {
                   <strong>LittleVerse stores no audio and no transcripts.</strong> When your child uses{" "}
                   <strong>Talk to Miko</strong>, their voice streams to Bolna (with Deepgram, OpenAI and ElevenLabs).{" "}
                   <strong>Bolna keeps a recording and transcript of each call</strong> in its call history, and Bolna sets how long.
-                  The <strong>Answer with my voice</strong> button uses the browser&apos;s speech recognition; in Chrome that audio goes to Google.
+                  The round microphone button (<strong>Tap to answer</strong>) uses the browser&apos;s speech recognition; in Chrome that audio goes to Google.
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-[#205C43]" role="status">
