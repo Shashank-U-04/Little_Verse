@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts tests/voiceServer.test.ts",
+    "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts tests/voiceServer.test.ts tests/micProblem.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -296,7 +296,11 @@ test("permission denial leaves tap answers available", async ({ page }) => {
   await grantVoiceConsent(page);
   await openAdventure(page);
   await page.getByRole("button", { name: /activate microphone/i }).click();
-  await expect(page.locator('p[role="alert"]')).toContainText("Microphone blocked");
+  const help = page.getByTestId("mic-help");
+  await expect(help).toHaveAttribute("data-problem", "denied");
+  await expect(help).toContainText("The microphone is blocked");
+  await expect(help).toContainText("choose Allow");
+  await expect(help.getByRole("button", { name: "Try again" })).toBeVisible();
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
 });
@@ -391,6 +395,90 @@ test("a failed Miko connection is reported honestly and tapping keeps working", 
   await expect(page.getByRole("alert").filter({ hasText: "isn't set up here yet" })).toBeVisible();
   await expect(page.getByTestId("tutor-voice-status")).toContainText("not connected");
   await expect(page.getByTestId("tutor-voice-status")).not.toContainText("Live");
+  await answer(page, 3);
+  await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
+});
+
+async function stubMicrophone(page: Page, failure: "NotAllowedError" | "NotFoundError" | "missing"): Promise<void> {
+  await page.addInitScript((kind) => {
+    if (kind === "missing") {
+      Object.defineProperty(navigator, "mediaDevices", { value: undefined, configurable: true });
+      return;
+    }
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      value: () => Promise.reject(new DOMException("Microphone failure", kind)),
+      configurable: true,
+    });
+  }, failure);
+}
+
+async function fakeBolnaSession(page: Page, requests: string[]): Promise<void> {
+  // The SDK reaches the microphone check only after a session exists; this one never connects.
+  await page.route("**/api/bolna-session", (route) => {
+    requests.push(route.request().url());
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        run_id: "e2e-run", agent_id: "e2e-agent", sip_username: "u", sip_password: "p", sip_domain: "sip.invalid",
+        wss_url: "wss://sip.invalid/ws", sip_register: true, expires_in: 120, ice_servers: [],
+      }),
+    });
+  });
+}
+
+test("Talk to Miko explains a blocked microphone, offers a retry, and keeps tapping available", async ({ page }) => {
+  const sessionRequests: string[] = [];
+  await page.goto("about:blank");
+  await spyOnDeviceSpeech(page);
+  await stubMicrophone(page, "NotAllowedError");
+  await fakeBolnaSession(page, sessionRequests);
+  await resetLocalData(page);
+  await grantVoiceConsent(page);
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
+  const help = page.getByTestId("mic-help");
+  await expect(help).toHaveAttribute("data-problem", "denied");
+  await expect(help).toContainText("For a grown-up:");
+  await expect(help).toContainText("You can keep playing by tapping the numbers.");
+  await expect(page.getByTestId("tutor-voice-status")).not.toContainText("Live");
+  await expectNoAccessibilityViolations(page);
+  await help.getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => sessionRequests.length).toBe(2);
+  await expect(page.getByTestId("mic-help")).toHaveAttribute("data-problem", "denied");
+  expect(await speechCalls(page)).toEqual([]);
+  await answer(page, 3);
+  await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
+});
+
+test("Talk to Miko tells a missing microphone apart from a blocked one", async ({ page }) => {
+  await page.goto("about:blank");
+  await stubMicrophone(page, "NotFoundError");
+  await fakeBolnaSession(page, []);
+  await resetLocalData(page);
+  await grantVoiceConsent(page);
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
+  const help = page.getByTestId("mic-help");
+  await expect(help).toHaveAttribute("data-problem", "unavailable");
+  await expect(help).toContainText("No working microphone found");
+  await expect(help).not.toContainText("blocked");
+});
+
+test("a browser that cannot capture audio gets clear help and no voice session is requested", async ({ page }) => {
+  const sessionRequests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/bolna-session")) sessionRequests.push(request.url()); });
+  await page.goto("about:blank");
+  await stubMicrophone(page, "missing");
+  await resetLocalData(page);
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
+  const help = page.getByTestId("mic-help");
+  await expect(help).toHaveAttribute("data-problem", "unsupported");
+  await expect(help).toContainText("latest Chrome or Edge");
+  await expect(help.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(sessionRequests).toEqual([]);
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
 });
