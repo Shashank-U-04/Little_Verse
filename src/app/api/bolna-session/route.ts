@@ -1,11 +1,13 @@
 import type { Session } from "@bolna/web-call";
+import { bolnaReadiness, readVoiceServerConfig } from "../../../lib/voice/server/config.ts";
+import { buildBolnaUserData, parseLessonContextRequest } from "../../../lib/voice/server/lessonContext.ts";
+import { isSameOriginRequest } from "../../../lib/voice/server/origin.ts";
+import { checkRateLimits, clientAddress, hashSubject, type RateLimitResult } from "../../../lib/voice/server/rateLimit.ts";
+import { jsonError, NO_STORE_HEADERS } from "../../../lib/voice/server/responses.ts";
+import { readCookie, verifyVoicePass, VOICE_PASS_COOKIE } from "../../../lib/voice/server/voicePass.ts";
 
 const SESSION_URL = "https://api.bolna.ai/web-call/freeswitch-session";
 const SESSION_TIMEOUT_MS = 12_000;
-const noStoreHeaders = {
-  "Cache-Control": "private, no-store, max-age=0",
-  Pragma: "no-cache",
-};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,29 +48,57 @@ function isBolnaSession(value: unknown): value is Session {
   });
 }
 
-function jsonError(message: string, status: number): Response {
-  return Response.json({ error: message }, { status, headers: noStoreHeaders });
-}
-
 export async function POST(request: Request): Promise<Response> {
-  const origin = request.headers.get("origin");
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (
-    !origin ||
-    origin !== new URL(request.url).origin ||
-    (fetchSite !== null && fetchSite !== "same-origin")
-  ) {
-    return jsonError("This voice-session request is not allowed.", 403);
+  const config = readVoiceServerConfig();
+  if (!isSameOriginRequest(request.headers, request.url, config.extraAllowedOrigins)) {
+    return jsonError("forbidden_origin", "This voice-session request is not allowed.", 403);
   }
 
-  if (process.env.NODE_ENV === "production") {
-    return jsonError("Voice calls are unavailable until parent access protection is configured.", 503);
+  const readiness = bolnaReadiness(config);
+  if (!readiness.ready) return jsonError(readiness.code, readiness.message, 503);
+  const bolna = config.bolna!;
+  const store = config.rateLimitStore!;
+  const now = Date.now();
+
+  if (config.accessCodeRequired) {
+    const pass = readCookie(request.headers.get("cookie"), VOICE_PASS_COOKIE);
+    if (!verifyVoicePass(pass, config.accessCode!, bolna.apiKey, now)) {
+      return jsonError("locked", "A grown-up needs to unlock voice first.", 401);
+    }
   }
 
-  const apiKey = process.env.BOLNA_API_KEY;
-  const agentId = process.env.BOLNA_AGENT_ID;
-  if (!apiKey || !agentId) {
-    return jsonError("Bolna is not configured. Set BOLNA_API_KEY and BOLNA_AGENT_ID locally.", 503);
+  let body: unknown = null;
+  try {
+    body = await request.json();
+  } catch {
+    // Handled below as an invalid lesson request.
+  }
+  const lesson = parseLessonContextRequest(body);
+  if (!lesson) return jsonError("invalid_lesson", "The voice session needs a valid lesson.", 400);
+
+  let limit: RateLimitResult;
+  try {
+    limit = await checkRateLimits(
+      store,
+      [
+        {
+          name: "session-client",
+          subject: hashSubject(clientAddress(request.headers)),
+          limit: config.limits.sessionsPerClient,
+          windowSeconds: config.limits.sessionWindowSeconds,
+        },
+        { name: "session-global", subject: "global", limit: config.limits.sessionsGlobalPerDay, windowSeconds: 86_400 },
+      ],
+      now,
+    );
+  } catch {
+    // Fail closed: without a working limiter a public URL could spend unbounded credits.
+    return jsonError("limiter_unavailable", "Voice is paused because the rate limiter is unavailable.", 503);
+  }
+  if (!limit.ok) {
+    return jsonError("rate_limited", "Miko needs a short rest. Please try again soon.", 429, {
+      "Retry-After": String(limit.retryAfterSeconds),
+    });
   }
 
   let upstream: Response;
@@ -76,35 +106,35 @@ export async function POST(request: Request): Promise<Response> {
     upstream = await fetch(SESSION_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${bolna.apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ agent_id: agentId }),
+      body: JSON.stringify({ agent_id: bolna.agentId, user_data: buildBolnaUserData(lesson) }),
       cache: "no-store",
       signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
-      return jsonError("Bolna session creation timed out. Please try again.", 504);
+      return jsonError("upstream_timeout", "Bolna session creation timed out. Please try again.", 504);
     }
-    return jsonError("Bolna could not be reached. Please try again.", 502);
+    return jsonError("upstream_unreachable", "Bolna could not be reached. Please try again.", 502);
   }
 
   if (!upstream.ok) {
-    if (upstream.status === 429) return jsonError("Bolna is at call capacity. Please try again shortly.", 429);
-    return jsonError("Bolna could not create a voice session. Check the server configuration.", 502);
+    if (upstream.status === 429) return jsonError("at_capacity", "Bolna is at call capacity. Please try again shortly.", 429);
+    return jsonError("upstream_rejected", "Bolna could not create a voice session. Check the server configuration.", 502);
   }
 
   let session: unknown;
   try {
     session = await upstream.json();
   } catch {
-    return jsonError("Bolna returned an invalid voice session.", 502);
+    return jsonError("upstream_invalid", "Bolna returned an invalid voice session.", 502);
   }
 
   if (!isBolnaSession(session)) {
-    return jsonError("Bolna returned an incomplete voice session.", 502);
+    return jsonError("upstream_invalid", "Bolna returned an incomplete voice session.", 502);
   }
 
-  return Response.json(session, { headers: noStoreHeaders });
+  return Response.json(session, { headers: NO_STORE_HEADERS });
 }

@@ -162,13 +162,17 @@ test("session route proxies a validated ephemeral session without exposing the A
   process.env.BOLNA_AGENT_ID = "agent-test";
   globalThis.fetch = async (_input, init) => {
     assert.equal(new Headers(init?.headers).get("authorization"), `Bearer ${apiKey}`);
-    assert.deepEqual(JSON.parse(String(init?.body)), { agent_id: "agent-test" });
+    const mintBody = JSON.parse(String(init?.body)) as { agent_id: string; user_data: Record<string, string> };
+    assert.equal(mintBody.agent_id, "agent-test");
+    assert.equal(mintBody.user_data.current_prompt, "Look at the butterflies! Can you count them?");
+    assert.equal(mintBody.user_data.current_challenge_number, "1");
     return Response.json(session);
   };
   try {
     const response = await createBolnaSession(new Request("http://localhost:3000/api/bolna-session", {
       method: "POST",
-      headers: { origin: "http://localhost:3000", "sec-fetch-site": "same-origin" },
+      headers: { host: "localhost:3000", origin: "http://localhost:3000", "sec-fetch-site": "same-origin" },
+      body: JSON.stringify({ adventure_id: "jungle-counting", challenge_index: 0 }),
     }));
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("cache-control"), "private, no-store, max-age=0");
