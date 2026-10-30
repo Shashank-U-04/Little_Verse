@@ -110,6 +110,41 @@ test("permission denial and connection failure produce safe generic errors", asy
   assert.equal(failedAdapter.ownsAudio(), false);
 });
 
+test("session endpoint failures surface the server's reason, not a configuration hint", async () => {
+  const { VoiceSessionRequestError } = await import("../src/lib/voice/bolnaSession.ts");
+  const lockedCall = new MockCall();
+  // The SDK wraps getSession failures as mint_failed and keeps the original error on cause2.
+  lockedCall.startImpl = async () => { throw { code: "mint_failed", cause2: new VoiceSessionRequestError("locked", 401) }; };
+  const adapter = new BolnaCallAdapter(() => lockedCall);
+  await assert.rejects(adapter.start(), /grown-up needs to turn on Miko's voice/);
+  assert.equal(adapter.getSnapshot().state, "error");
+
+  const plainCall = new MockCall();
+  plainCall.startImpl = async () => { throw { code: "mint_failed" }; };
+  const plain = new BolnaCallAdapter(() => plainCall);
+  await assert.rejects(plain.start(), /Miko couldn't connect/);
+});
+
+test("session requests send only lesson identifiers and map server error codes", async () => {
+  const { requestBolnaSession, VoiceSessionRequestError } = await import("../src/lib/voice/bolnaSession.ts");
+  let sentBody: unknown;
+  const ok = await requestBolnaSession({ adventureId: "jungle-counting", challengeIndex: 2 }, async (_url, init) => {
+    sentBody = JSON.parse(String(init?.body));
+    return Response.json({ run_id: "r" });
+  });
+  assert.deepEqual(sentBody, { adventure_id: "jungle-counting", challenge_index: 2 });
+  assert.equal(ok.run_id, "r");
+
+  await assert.rejects(
+    requestBolnaSession({ adventureId: "jungle-counting", challengeIndex: 0 }, async () => Response.json({ code: "rate_limited" }, { status: 429 })),
+    (error: unknown) => error instanceof VoiceSessionRequestError && error.code === "rate_limited" && /little rest/.test(error.childMessage),
+  );
+  await assert.rejects(
+    requestBolnaSession({ adventureId: "jungle-counting", challengeIndex: 0 }, async () => Response.json({ code: "rate_limit_store_missing" }, { status: 503 })),
+    (error: unknown) => error instanceof VoiceSessionRequestError && /isn't set up here yet/.test(error.childMessage),
+  );
+});
+
 test("dispose initiates call teardown and detaches SDK listeners", async () => {
   const call = new MockCall();
   const adapter = new BolnaCallAdapter(() => call);

@@ -29,8 +29,23 @@ const AUDIO_OWNED_STATES = new Set<BolnaUiState>([
   "ending",
 ]);
 
+/** A session-endpoint failure carries child-friendly copy on the SDK error's cause. */
+function sessionRequestMessage(error: object): string | null {
+  const { cause, cause2 } = error as { cause?: unknown; cause2?: unknown };
+  const source = cause ?? cause2;
+  if (typeof source === "object" && source !== null && "childMessage" in source) {
+    const message = (source as { childMessage: unknown }).childMessage;
+    if (typeof message === "string") return message;
+  }
+  return null;
+}
+
 function describeCallError(error: CallError | unknown): string {
   if (typeof error === "object" && error !== null && "code" in error) {
+    if ((error as CallError).code === "mint_failed") {
+      const message = sessionRequestMessage(error);
+      if (message) return message;
+    }
     switch ((error as CallError).code) {
       case "microphone_denied":
         return "Microphone access was denied. You can still answer by tapping a number.";
@@ -39,7 +54,7 @@ function describeCallError(error: CallError | unknown): string {
       case "autoplay_blocked":
         return "The browser blocked call audio. Try again using the Start conversation button.";
       case "mint_failed":
-        return "A voice session could not be created. Check the local Bolna configuration.";
+        return "Miko couldn't connect. Please try again, or keep tapping the numbers.";
       case "call_rejected":
       case "connect_failed":
         return "The voice call could not connect. Please try again or tap a number.";
