@@ -205,7 +205,7 @@ export default function ParentProgressPage(): React.ReactElement {
               </span>
               <CardTitle className="text-base">Accuracy by Session</CardTitle>
             </div>
-            <p className="text-xs leading-relaxed text-[#24352B]/85">Each bar is one completed adventure \u2014 accuracy across all challenges.</p>
+            <p className="text-xs leading-relaxed text-[#24352B]/85">Each bar is one completed adventure \— accuracy across all challenges.</p>
           </CardHeader>
           <CardContent>
             <div className="h-[240px] w-full">
@@ -312,7 +312,7 @@ export default function ParentProgressPage(): React.ReactElement {
           <TrendingUp className="h-3.5 w-3.5" aria-hidden />
         </span>
         <p className="text-xs leading-relaxed text-[#24352B]/85">
-          <span className="font-semibold text-[#205C43]">How to read this:</span> higher bars mean stronger unaided accuracy. Hint rate shows how often scaffolding was needed \u2014 lower is more independent.
+          <span className="font-semibold text-[#205C43]">How to read this:</span> higher bars mean stronger unaided accuracy. Hint rate shows how often scaffolding was needed \— lower is more independent.
         </p>
       </motion.div>
 
@@ -421,7 +421,7 @@ export default function ParentProgressPage(): React.ReactElement {
           <div>
             <p className="text-[13px] font-bold tracking-tight text-[#205C43]">What this tells you</p>
             <p className="mt-1 text-[13px] leading-relaxed text-[#24352B]/85">
-              Accuracy shows overall success; skill breakdown shows where support was needed. Attempt history makes every answer traceable \u2014 no hidden scoring.
+              Accuracy shows overall success; skill breakdown shows where support was needed. Attempt history makes every answer traceable \— no hidden scoring.
             </p>
           </div>
         </div>

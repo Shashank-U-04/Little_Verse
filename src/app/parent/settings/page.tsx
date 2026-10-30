@@ -17,6 +17,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { clearVoiceConsent, readVoiceConsent, type VoiceConsent } from "@/lib/voice/voiceConsent";
 
 const STORAGE_KEY = "littleverse:sessions";
 const SETTINGS_KEY = "littleverse:settings";
@@ -27,6 +28,26 @@ type TimeLimit = "5" | "10" | "15";
 export default function ParentSettingsPage(): React.ReactElement {
   const [timeLimit, setTimeLimit] = useState<TimeLimit>("10");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [voiceConsent, setVoiceConsent] = useState<VoiceConsent | null>(null);
+
+  useEffect(() => {
+    try {
+      // Hydration from browser storage after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVoiceConsent(readVoiceConsent(window.localStorage));
+    } catch {
+      // Storage unavailable: voice consent cannot have been saved.
+    }
+  }, []);
+
+  function handleWithdrawVoiceConsent(): void {
+    try {
+      clearVoiceConsent(window.localStorage);
+    } catch {
+      // Nothing stored to clear.
+    }
+    setVoiceConsent(null);
+  }
 
   useEffect(() => {
     try {
@@ -66,7 +87,7 @@ export default function ParentSettingsPage(): React.ReactElement {
       window.localStorage.removeItem(STORAGE_KEY);
       window.alert("Local data cleared.");
     } catch {
-      window.alert("Could not clear data \u2014 storage is unavailable.");
+      window.alert("Could not clear data \— storage is unavailable.");
     }
   }
 
@@ -124,7 +145,7 @@ export default function ParentSettingsPage(): React.ReactElement {
                 <option value="en">English</option>
               </select>
               <p id="lv-language-help" className="mt-2 text-[11px] leading-relaxed text-[#24352B]/85">
-                English \u2014 more languages coming soon
+                English \— more languages coming soon
               </p>
             </div>
           </div>
@@ -174,7 +195,7 @@ export default function ParentSettingsPage(): React.ReactElement {
             </span>
             <CardTitle className="text-base">Privacy & Safety</CardTitle>
           </div>
-          <p className="text-xs leading-relaxed text-[#24352B]/85">How your child\u2019s learning data is handled.</p>
+          <p className="text-xs leading-relaxed text-[#24352B]/85">How your child\’s learning data is handled.</p>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
           <ul className="space-y-3">
@@ -183,17 +204,30 @@ export default function ParentSettingsPage(): React.ReactElement {
               <div>
                 <p className="text-[13px] font-semibold tracking-tight text-[#205C43]">Minimal data collection</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-[#24352B]/85">
-                  Only counts, hints used, and accuracy are stored \u2014 no names, photos, or browsing activity.
+                  Only counts, hints used, and accuracy are stored \— no names, photos, or browsing activity.
                 </p>
               </div>
             </li>
             <li className="flex gap-3 rounded-2xl bg-[#FFF8E9] px-4 py-3">
               <Mic className="mt-0.5 h-4 w-4 shrink-0 text-[#205C43]" aria-hidden />
               <div>
-                <p className="text-[13px] font-semibold tracking-tight text-[#205C43]">No voice recordings retained</p>
+                <p className="text-[13px] font-semibold tracking-tight text-[#205C43]">Voice: what LittleVerse stores vs. what voice partners keep</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-[#24352B]/85">
-                  Voice input (when enabled) is processed for the current turn only. We do not store raw audio.
+                  <strong>LittleVerse stores no audio and no transcripts.</strong> When your child uses{" "}
+                  <strong>Talk to Miko</strong>, their voice streams to Bolna (with Deepgram, OpenAI and ElevenLabs).{" "}
+                  <strong>Bolna keeps a recording and transcript of each call</strong> in its call history, and Bolna sets how long.
+                  The <strong>Answer with my voice</strong> button uses the browser&apos;s speech recognition; in Chrome that audio goes to Google.
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-[#205C43]" role="status">
+                    {voiceConsent ? `Voice consent given on this device (${new Date(voiceConsent.acceptedAt).toLocaleDateString("en-IN")}).` : "Voice is off until a grown-up agrees on this device."}
+                  </span>
+                  {voiceConsent && (
+                    <Button variant="secondary" size="sm" onClick={handleWithdrawVoiceConsent}>
+                      Withdraw voice consent
+                    </Button>
+                  )}
+                </div>
               </div>
             </li>
             <li className="flex gap-3 rounded-2xl bg-[#FFF8E9] px-4 py-3">
@@ -225,7 +259,7 @@ export default function ParentSettingsPage(): React.ReactElement {
                 <p className="text-xs font-bold tracking-tight text-[#1a4a6e]">When Supabase is added</p>
                 <p className="mt-1 text-xs leading-relaxed text-[#24352B]/85">
                   Data will be protected with row-level security (RLS): learners and parents can only read their own
-                  family\u2019s rows. All writes require authentication. No cross-family access, even for admins
+                  family\’s rows. All writes require authentication. No cross-family access, even for admins
                   querying via the app.
                 </p>
               </div>
@@ -257,7 +291,7 @@ export default function ParentSettingsPage(): React.ReactElement {
             <li className="flex gap-2.5">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#205C43]" aria-hidden />
               <span>
-                <span className="font-semibold text-[#205C43]">No personal information questions:</span> the tutor never asks for a child\u2019s name, address, school, or
+                <span className="font-semibold text-[#205C43]">No personal information questions:</span> the tutor never asks for a child\’s name, address, school, or
                 contact details.
               </span>
             </li>
@@ -272,7 +306,7 @@ export default function ParentSettingsPage(): React.ReactElement {
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#205C43]" aria-hidden />
               <span>
                 <span className="font-semibold text-[#205C43]">Concerning disclosures:</span> if a child shares something that suggests they may be unsafe, the tutor gently
-                redirects and encourages talking to a trusted grown-up \u2014 it does not attempt counselling.
+                redirects and encourages talking to a trusted grown-up \— it does not attempt counselling.
               </span>
             </li>
           </ul>
@@ -331,7 +365,7 @@ export default function ParentSettingsPage(): React.ReactElement {
             <Badge variant="leaf" className="text-[11px]">
               v{APP_VERSION} \u00b7 MVP
             </Badge>
-            <span className="text-xs text-[#24352B]/85">LittleVerse AI \u2014 Jungle Counting Adventure</span>
+            <span className="text-xs text-[#24352B]/85">LittleVerse AI \— Jungle Counting Adventure</span>
           </div>
           <p className="text-xs leading-relaxed text-[#24352B]/85">
             This is an early build focused on a single adventure. Feedback from families guides what we build next.
@@ -339,7 +373,7 @@ export default function ParentSettingsPage(): React.ReactElement {
           <div className="rounded-2xl border border-[#FFF4D6] bg-[#FFF8E9] px-4 py-3">
             <p className="text-[11px] font-semibold tracking-wide text-[#24352B]/85">Privacy note</p>
             <p className="mt-1 text-xs leading-relaxed text-[#24352B]/85">
-              We store only what helps your child learn \u2014 counts, hints, and accuracy. No ads, no tracking, no data sale. When cloud features arrive, parents will explicitly opt in before any sync happens, and every row will require authentication.
+              We store only what helps your child learn \— counts, hints, and accuracy. No ads, no tracking, no data sale. When cloud features arrive, parents will explicitly opt in before any sync happens, and every row will require authentication.
             </p>
           </div>
         </CardContent>
