@@ -17,7 +17,8 @@ export type LessonContextRequest = { adventureId: string; challengeIndex: number
 export function parseLessonContextRequest(body: unknown): LessonContextRequest | null {
   if (typeof body !== "object" || body === null) return null;
   const { adventure_id: adventureId, challenge_index: challengeIndex } = body as Record<string, unknown>;
-  if (typeof adventureId !== "string" || !(adventureId in ADVENTURES)) return null;
+  // Object.hasOwn, not `in`: inherited keys such as "constructor" must not pass as adventures.
+  if (typeof adventureId !== "string" || !Object.hasOwn(ADVENTURES, adventureId)) return null;
   if (typeof challengeIndex !== "number" || !Number.isInteger(challengeIndex)) return null;
   const adventure = ADVENTURES[adventureId]!;
   if (challengeIndex < 0 || challengeIndex >= adventure.challenges.length) return null;

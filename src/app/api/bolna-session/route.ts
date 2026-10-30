@@ -91,8 +91,9 @@ export async function POST(request: Request): Promise<Response> {
       ],
       now,
     );
-  } catch {
+  } catch (error) {
     // Fail closed: without a working limiter a public URL could spend unbounded credits.
+    console.error("[bolna-session] rate-limit store failed:", error instanceof Error ? error.message : "unknown error");
     return jsonError("limiter_unavailable", "Voice is paused because the rate limiter is unavailable.", 503);
   }
   if (!limit.ok) {
@@ -114,6 +115,7 @@ export async function POST(request: Request): Promise<Response> {
       signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
     });
   } catch (error) {
+    console.error("[bolna-session] mint request failed:", error instanceof Error ? error.name : "unknown error");
     if (error instanceof DOMException && error.name === "TimeoutError") {
       return jsonError("upstream_timeout", "Bolna session creation timed out. Please try again.", 504);
     }
@@ -121,6 +123,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (!upstream.ok) {
+    // Status only: the upstream body may echo request details and is never logged.
+    console.error(`[bolna-session] Bolna rejected the mint with HTTP ${upstream.status}`);
     if (upstream.status === 429) return jsonError("at_capacity", "Bolna is at call capacity. Please try again shortly.", 429);
     return jsonError("upstream_rejected", "Bolna could not create a voice session. Check the server configuration.", 502);
   }

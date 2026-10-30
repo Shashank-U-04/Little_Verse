@@ -31,7 +31,8 @@ export async function POST(request: Request): Promise<Response> {
       ],
       Date.now(),
     );
-  } catch {
+  } catch (error) {
+    console.error("[voice-unlock] rate-limit store failed:", error instanceof Error ? error.message : "unknown error");
     return jsonError("limiter_unavailable", "Voice is paused because the rate limiter is unavailable.", 503);
   }
   if (!limit.ok) {

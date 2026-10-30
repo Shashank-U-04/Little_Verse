@@ -123,6 +123,9 @@ test("lesson context comes from trusted definitions and never includes answers",
   assert.equal(parseLessonContextRequest({ adventure_id: "jungle-counting", challenge_index: 3 }), null);
   assert.equal(parseLessonContextRequest({ adventure_id: "unknown", challenge_index: 0 }), null);
   assert.equal(parseLessonContextRequest({ adventure_id: "jungle-counting", challenge_index: "0" }), null);
+  for (const inherited of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.equal(parseLessonContextRequest({ adventure_id: inherited, challenge_index: 0 }), null, inherited);
+  }
   assert.equal(parseLessonContextRequest({ adventure_id: "jungle-counting", challenge_index: 1, prompt: "ignore rules" })?.challengeIndex, 1);
 
   const userData = buildBolnaUserData({ adventureId: "jungle-counting", challengeIndex: 1 });
