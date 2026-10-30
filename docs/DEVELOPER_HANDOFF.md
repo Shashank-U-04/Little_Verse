@@ -276,6 +276,8 @@ npm run test:e2e              # 36 cases; starts next dev on 127.0.0.1:3000 usin
 npm run build                 # all three /api routes must show ƒ (Dynamic), never ○ (Static)
 ```
 
+`npm run build` also runs `scripts/check-build-css.mjs`, which fails the build if the production CSS has no Tailwind utilities. Tailwind is processed by `postcss.config.mjs` (`@tailwindcss/postcss`); without it the webpack build shipped a completely unstyled site (30 Oct) while every dev-server test passed. Builds download the Nunito font from Google Fonts; a one-off `next/font` error is usually a network blip — retry once.
+
 The e2e suite never mints a real Bolna session (it stubs or never consents). If `DEMO_ACCESS_CODE` is set in your `.env.local`, the "failed Miko connection" test will see the code field — unset it locally for e2e, or update the test.
 
 ### Secret scan of the built client bundle (after `npm run build`)
