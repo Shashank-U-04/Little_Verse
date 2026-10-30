@@ -66,6 +66,27 @@ async function expectNoAccessibilityViolations(page: Page): Promise<void> {
   expect(results.violations, results.violations.map((violation) => `${violation.id}: ${violation.help}`).join("\n")).toEqual([]);
 }
 
+async function grantVoiceConsent(page: Page): Promise<void> {
+  await page.evaluate(() => window.localStorage.setItem(
+    "littleverse:voice-consent",
+    JSON.stringify({ version: 1, acceptedAt: "2026-10-31T00:00:00.000Z" }),
+  ));
+}
+
+async function spyOnDeviceSpeech(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    (window as unknown as { __speechCalls: string[] }).__speechCalls = calls;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.speak = (utterance: SpeechSynthesisUtterance) => { calls.push(utterance.text); };
+    }
+  });
+}
+
+async function speechCalls(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __speechCalls: string[] }).__speechCalls);
+}
+
 test.beforeEach(async ({ page }) => {
   await resetLocalData(page);
 });
@@ -272,6 +293,7 @@ test("permission denial leaves tap answers available", async ({ page }) => {
     }
   });
   await resetLocalData(page);
+  await grantVoiceConsent(page);
   await openAdventure(page);
   await page.getByRole("button", { name: /activate microphone/i }).click();
   await expect(page.locator('p[role="alert"]')).toContainText("Microphone blocked");
@@ -308,4 +330,67 @@ test("home, adventure, and parent pages pass automated accessibility checks", as
   await page.goto("/parent");
   await expect(page.getByRole("heading", { name: "Parent Dashboard" })).toBeVisible();
   await expectNoAccessibilityViolations(page);
+});
+
+test("with Bolna selected, the device voice never speaks on its own", async ({ page }) => {
+  await page.goto("about:blank");
+  await spyOnDeviceSpeech(page);
+  await resetLocalData(page);
+  await openAdventure(page);
+  await expect(page.getByTestId("tutor-voice-status")).toContainText("Miko's voice");
+  await answer(page, 2);
+  await expectFeedback(page, "Good try! Let's try again.");
+  await answer(page, 3);
+  await advance(page);
+  await expect(page.getByRole("heading", { name: /bananas/i })).toBeVisible();
+  await page.waitForTimeout(800);
+  expect(await speechCalls(page)).toEqual([]);
+  await expect(page.getByRole("button", { name: "Hear again — repeat the question" })).toHaveCount(0);
+});
+
+test("the device voice is an explicit, labelled opt-in", async ({ page }) => {
+  await page.goto("about:blank");
+  await spyOnDeviceSpeech(page);
+  await resetLocalData(page);
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Use device voice instead" }).click();
+  await expect(page.getByText("Device voice is on (this device's built-in voice, not Miko's).")).toBeVisible();
+  expect(await speechCalls(page)).toEqual(["Look at the butterflies! Can you count them?"]);
+  await page.getByRole("button", { name: "Turn device voice off" }).click();
+  await answer(page, 2);
+  await page.waitForTimeout(600);
+  expect(await speechCalls(page)).toEqual(["Look at the butterflies! Can you count them?"]);
+});
+
+test("Talk to Miko asks a grown-up for consent before any voice session", async ({ page }) => {
+  const sessionRequests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/bolna-session")) sessionRequests.push(request.url()); });
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "For grown-ups: before Miko can talk" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("Bolna keeps a recording and a transcript of each call");
+  await expect(dialog).toContainText("LittleVerse itself stores no audio and no transcripts.");
+  await expect(dialog.getByRole("button", { name: "Agree and turn on voice" })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Not now" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(sessionRequests).toEqual([]);
+  await answer(page, 3);
+  await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
+});
+
+test("a failed Miko connection is reported honestly and tapping keeps working", async ({ page }) => {
+  await page.route("**/api/bolna-session", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "Voice is off", code: "rate_limit_store_missing" }),
+  }));
+  await grantVoiceConsent(page);
+  await openAdventure(page);
+  await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "isn't set up here yet" })).toBeVisible();
+  await expect(page.getByTestId("tutor-voice-status")).toContainText("not connected");
+  await expect(page.getByTestId("tutor-voice-status")).not.toContainText("Live");
+  await answer(page, 3);
+  await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
 });

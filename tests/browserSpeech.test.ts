@@ -164,3 +164,54 @@ test("pending speech timers are canceled and stale queued callbacks stay inert",
 
   assert.deepEqual(speech.spoken, []);
 });
+
+test("device speech never runs unless it is the chosen voice", async () => {
+  const { initialTutorVoiceMode } = await import("../src/lib/voice/voiceConsent.ts");
+  const adapter = new BolnaCallAdapter(() => new MockCall());
+  let mode = initialTutorVoiceMode("bolna");
+  const spoken: string[] = [];
+  const timers = new FakeTimers();
+  const controller = new BrowserSpeechController({
+    isAudioOwned: () => adapter.ownsAudio(),
+    isEnabled: () => mode === "device",
+    getSynthesis: () => ({ cancel: () => undefined, speak: (utterance) => { spoken.push((utterance as SpeechUtterancePort & { text: string }).text); } }),
+    createUtterance: (text) => ({ text, lang: "", rate: 1, pitch: 1, onend: null, onerror: null }) as SpeechUtterancePort,
+    timers,
+    onStart: () => undefined,
+    onFinish: () => undefined,
+  });
+
+  assert.equal(controller.speak("Bolna is selected"), false);
+  controller.schedule("Queued while Bolna is selected", 400);
+  const [queuedId] = [...timers.active];
+  mode = "device";
+  assert.equal(controller.speak("Grown-up chose the device voice"), true);
+  mode = "bolna";
+  timers.fireEvenIfCleared(queuedId!);
+  assert.deepEqual(spoken, ["Grown-up chose the device voice"]);
+
+  assert.equal(initialTutorVoiceMode("browser"), "device");
+  assert.equal(initialTutorVoiceMode(null), "off");
+});
+
+test("voice consent is versioned and tolerates broken storage", async () => {
+  const { readVoiceConsent, saveVoiceConsent, clearVoiceConsent, VOICE_CONSENT_KEY } = await import("../src/lib/voice/voiceConsent.ts");
+  const data = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => { data.set(key, value); },
+    removeItem: (key: string) => { data.delete(key); },
+  };
+  assert.equal(readVoiceConsent(storage), null);
+  saveVoiceConsent(storage, new Date("2026-10-31T10:00:00.000Z"));
+  assert.deepEqual(readVoiceConsent(storage), { version: 1, acceptedAt: "2026-10-31T10:00:00.000Z" });
+  data.set(VOICE_CONSENT_KEY, JSON.stringify({ version: 0, acceptedAt: "old" }));
+  assert.equal(readVoiceConsent(storage), null, "older disclosure versions need fresh consent");
+  data.set(VOICE_CONSENT_KEY, "{not json");
+  assert.equal(readVoiceConsent(storage), null);
+  clearVoiceConsent(storage);
+  assert.equal(data.has(VOICE_CONSENT_KEY), false);
+  const throwing = { setItem: () => { throw new Error("quota"); }, removeItem: () => { throw new Error("denied"); } };
+  assert.equal(saveVoiceConsent(throwing, new Date(0)).version, 1);
+  clearVoiceConsent(throwing);
+});

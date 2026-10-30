@@ -18,6 +18,12 @@ export interface SpeechTimerPort {
 
 export interface BrowserSpeechControllerOptions {
   isAudioOwned: () => boolean;
+  /**
+   * Device speech is an explicit opt-in. When Bolna is the selected tutor
+   * voice this returns false, so speechSynthesis is never called.
+   * Defaults to enabled for callers that only use the device voice.
+   */
+  isEnabled?: () => boolean;
   getSynthesis: () => SpeechSynthesisPort | null;
   createUtterance: (text: string) => SpeechUtterancePort;
   timers: SpeechTimerPort;
@@ -36,6 +42,7 @@ export class BrowserSpeechController {
   }
 
   speak(text: string): boolean {
+    if (this.options.isEnabled && !this.options.isEnabled()) return false;
     if (this.options.isAudioOwned()) return false;
     const synthesis = this.options.getSynthesis();
     if (!synthesis) return false;
@@ -71,6 +78,7 @@ export class BrowserSpeechController {
       // Check again at execution time so a callback captured before a rerender
       // cannot start speech after Bolna has taken audio ownership.
       if (!this.options.isAudioOwned()) this.speak(text);
+      // speak() re-checks isEnabled, so a voice switch made while queued wins.
     }, delayMs);
     this.pendingTimers.add(timerId);
     return () => this.clearTimer(timerId);
