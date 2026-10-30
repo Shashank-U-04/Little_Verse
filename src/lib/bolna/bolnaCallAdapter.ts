@@ -101,7 +101,8 @@ export class BolnaCallAdapter {
 
   async start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
-    if (this.call && ["connecting", "active", "ending"].includes(this.state)) return;
+    // Covers requesting_permission and an unconfirmed hang-up whose SDK call is still live.
+    if (this.call && this.ownsAudio()) return;
 
     const call = this.createCall();
     this.call = call;

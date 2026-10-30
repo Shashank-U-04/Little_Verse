@@ -75,6 +75,37 @@ test("Bolna adapter exposes connecting and active, then awaits SDK stop teardown
   assert.equal(call.listenerCount(), 0);
 });
 
+test("start does not mint a second call while the first still owns audio", async () => {
+  const calls: MockCall[] = [];
+  const adapter = new BolnaCallAdapter(() => {
+    const call = new MockCall();
+    // SDK start resolves before the remote side answers.
+    call.startImpl = async () => { call.state = "connecting"; call.emit("media-permission", undefined as never); };
+    calls.push(call);
+    return call;
+  });
+
+  await adapter.start();
+  assert.equal(adapter.getSnapshot().state, "requesting_permission");
+  await adapter.start();
+  assert.equal(calls.length, 1);
+
+  // An unconfirmed hang-up leaves the live SDK call retained in the error state.
+  calls[0]!.stopImpl = async () => { throw new Error("teardown failed"); };
+  await assert.rejects(adapter.stop());
+  calls[0]!.state = "active";
+  assert.equal(adapter.getSnapshot().state, "error");
+  assert.equal(adapter.ownsAudio(), true);
+  await adapter.start();
+  assert.equal(calls.length, 1);
+
+  // Once the SDK reports the call ended, a fresh start is allowed.
+  calls[0]!.state = "ended";
+  calls[0]!.startImpl = async () => undefined;
+  await adapter.start();
+  assert.equal(calls.length, 2);
+});
+
 test("remote hangup is reflected as ended and failed call-end is an error", async () => {
   const call = new MockCall();
   const adapter = new BolnaCallAdapter(() => call);
