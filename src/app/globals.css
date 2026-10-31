@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 :root {
   --forest: #205C43;
@@ -22,6 +22,7 @@
   --color-ink: var(--ink);
   --font-nunito: var(--font-nunito);
   --font-sans: var(--font-nunito);
+  --font-display: var(--font-fredoka);
 }
 
 body {
@@ -66,6 +67,63 @@ body {
 
 .jungle-shadow {
   box-shadow: 0 6px 20px rgba(18, 61, 48, 0.15), 0 2px 8px rgba(18, 61, 48, 0.1);
+}
+
+/* Scenery motion: trees sway from their base, fireflies drift. */
+.sway,
+.sway-slow,
+.sway-fast {
+  transform-origin: 50% 100%;
+  animation: sway 7s ease-in-out infinite;
+}
+.sway-slow { animation-duration: 11s; }
+.sway-fast { animation-duration: 4.5s; }
+
+@keyframes sway {
+  0%, 100% { transform: rotate(-0.6deg); }
+  50% { transform: rotate(0.6deg); }
+}
+
+.firefly {
+  animation: firefly 5s ease-in-out infinite;
+}
+
+@keyframes firefly {
+  0%, 100% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: 1; }
+  50% { transform: translate(14px, -18px); opacity: 0.9; }
+  80% { opacity: 0.2; transform: translate(-6px, -30px); }
+}
+
+.float-y {
+  animation: float-y 4s ease-in-out infinite;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.shine {
+  background-size: 200% 100%;
+  animation: shine 3s linear infinite;
+}
+
+@keyframes shine {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.text-outline {
+  text-shadow: 0 2px 0 rgba(18, 61, 48, 0.35), 0 6px 24px rgba(18, 61, 48, 0.35);
+}
+
+/* Certificates print on their own, edge to edge. */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0; margin: 0; box-shadow: none !important; }
+  @page { size: landscape; margin: 0; }
 }
 
 /* Reduced motion */

@@ -1,15 +1,5 @@
-import { jungleCountingAdventure } from "../../../features/learning/activities.ts";
-import type { AdventureDefinition } from "../../../features/learning/types.ts";
-
-const ADVENTURES: Record<string, AdventureDefinition> = {
-  [jungleCountingAdventure.id]: jungleCountingAdventure,
-};
-
-const OBJECT_PLURALS: Record<string, string> = {
-  butterfly: "butterflies",
-  banana: "bananas",
-  elephant: "elephants",
-};
+import { ADVENTURES } from "../../../features/learning/activities.ts";
+import { pluralOf } from "../../../features/learning/objects.ts";
 
 export type LessonContextRequest = { adventureId: string; challengeIndex: number };
 
@@ -35,7 +25,7 @@ export function buildBolnaUserData({ adventureId, challengeIndex }: LessonContex
   const current = adventure.challenges[challengeIndex]!;
   const challengeList = adventure.challenges
     .map((challenge, index) => {
-      const objects = OBJECT_PLURALS[challenge.objectType] ?? challenge.objectType;
+      const objects = pluralOf(challenge.objectType);
       return `${index + 1}. ${challenge.prompt} (${objects}; answer buttons ${challenge.options.join(", ")})`;
     })
     .join("\n");
@@ -46,7 +36,7 @@ export function buildBolnaUserData({ adventureId, challengeIndex }: LessonContex
     total_challenges: String(adventure.challenges.length),
     current_challenge_number: String(challengeIndex + 1),
     current_prompt: current.prompt,
-    current_objects: OBJECT_PLURALS[current.objectType] ?? current.objectType,
+    current_objects: pluralOf(current.objectType),
     challenge_list: challengeList,
   };
 }

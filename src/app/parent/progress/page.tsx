@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import {
@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { loadSessions } from "@/lib/storage";
+import { useFamilyGate } from "@/components/family/useFamilyGate";
+import { getAdventure } from "@/features/learning/activities";
 import { scoreSession } from "@/features/learning/scoring";
 import { buildSkillProgress } from "@/features/learning/progress";
 import type { Session, SkillProgress } from "@/features/learning/types";
@@ -110,14 +111,8 @@ function shortId(id: string): string {
 }
 
 export default function ParentProgressPage(): React.ReactElement {
-  const [sessions, setSessions] = useState<Session[] | null>(null);
-
-  useEffect(() => {
-    const loaded = loadSessions();
-    // Hydrate the client-only dashboard from localStorage after the route mounts.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessions(loaded);
-  }, []);
+  const family = useFamilyGate("parent");
+  const sessions = family ? family.sessions : null;
 
   const ready: boolean = sessions !== null;
   const data = useMemo<Session[]>(() => sessions ?? [], [sessions]);
@@ -173,13 +168,13 @@ export default function ParentProgressPage(): React.ReactElement {
             </div>
             <div>
               <p className="text-sm font-semibold text-[#205C43]">No completed progress yet — finish an adventure!</p>
-              <p className="mt-1 text-xs text-[#24352B]/85">Complete a Jungle Counting session to see skill evidence here.</p>
+              <p className="mt-1 text-xs text-[#24352B]/85">Finish an adventure in the Kids Zone to see skill evidence here.</p>
             </div>
             <Link
-              href="/adventure/jungle-counting"
+              href="/kids"
               className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#205C43] px-5 py-2 text-[15px] font-semibold tracking-tight text-white shadow-[0_4px_14px_rgba(32,92,67,0.25)] transition-colors hover:bg-[#184a36]"
             >
-              Start Jungle Counting
+              Open the Kids Zone
             </Link>
           </CardContent>
         </Card>
@@ -291,7 +286,7 @@ export default function ParentProgressPage(): React.ReactElement {
                         />
                       </div>
                       <p className="mt-2 text-[11px] leading-relaxed text-[#24352B]/85">
-                        {sp.skillId === "counting" ? "Counting objects from 1 to 5" : "Recognising written numerals"}
+                        {sp.skillId === "counting" ? "Counting groups of objects" : "Recognising written numerals"}
                       </p>
                     </div>
                   </Card>
@@ -341,7 +336,7 @@ export default function ParentProgressPage(): React.ReactElement {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <CardTitle className="text-[15px]">
-                          {session.activityId === "jungle-counting" ? "Jungle Counting" : session.activityId}
+                          {getAdventure(session.activityId)?.title ?? session.activityId}
                         </CardTitle>
                         <p className="mt-1 text-xs text-[#24352B]/85">
                           {formatDateLong(session.startedAt)} \u00b7 {formatTime(session.startedAt)} \u00b7 {session.challenges.length} challenges

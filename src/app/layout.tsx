@@ -1,5 +1,5 @@
 ﻿import type { Metadata } from "next";
-import { Nunito } from "next/font/google";
+import { Fredoka, Nunito } from "next/font/google";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -9,9 +9,17 @@ const nunito = Nunito({
   display: "swap",
 });
 
+const fredoka = Fredoka({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-fredoka",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "LittleVerse AI \u2014 Jungle Counting Adventure",
-  description: "Interactive counting adventure for ages 4-6",
+  title: "LittleVerse AI — Jungle learning adventures for ages 3–8",
+  description:
+    "Voice-first jungle adventures where young children count, explore and level up, with a parent dashboard that shows what they really learned.",
 };
 
 export default function RootLayout({
@@ -20,8 +28,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${nunito.variable} antialiased`}>
-      <body className={`${nunito.variable} antialiased min-h-screen bg-cream`}>
+    <html lang="en" className={`${nunito.variable} ${fredoka.variable} antialiased`}>
+      <body className="min-h-screen bg-cream antialiased">
         {children}
       </body>
     </html>
