@@ -6,15 +6,33 @@ const STORAGE_KEY = "littleverse:sessions";
 const ADVENTURE_PATH = "/adventure/jungle-counting";
 const COMPLETE_PATH = "/adventure/jungle-counting/complete";
 
+// A signed-in parent with one four-year-old, seeded straight into browser storage.
+const FAMILY = {
+  parent: { id: "parent-e2e", name: "Priya", email: "priya@example.com", salt: "00", passwordHash: "00", createdAt: "2026-10-01T00:00:00.000Z" },
+  child: { id: "child-e2e", parentId: "parent-e2e", name: "Aanya", age: 4, hobbies: ["Dinosaurs"], focusAreas: ["numbers"], avatar: "panda", createdAt: "2026-10-01T00:00:00.000Z" },
+};
+
 async function resetLocalData(page: Page): Promise<void> {
   await page.goto("/");
-  await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Jungle Counting Adventure" })).toBeVisible();
+  await page.evaluate(({ parent, child }) => {
+    window.localStorage.clear();
+    window.localStorage.setItem("littleverse:parents", JSON.stringify([parent]));
+    window.localStorage.setItem("littleverse:auth", JSON.stringify({ parentId: parent.id, signedInAt: parent.createdAt }));
+    window.localStorage.setItem("littleverse:children", JSON.stringify([child]));
+    window.localStorage.setItem("littleverse:active-child", JSON.stringify(child.id));
+  }, FAMILY);
+  await page.goto("/kids");
+  await expect(page.getByRole("heading", { name: "Hi, Aanya!" })).toBeVisible();
+}
+
+/** On narrow screens the main links sit behind the menu button. */
+async function openMainMenu(page: Page): Promise<void> {
+  const menu = page.getByRole("button", { name: "Open menu" });
+  if (await menu.isVisible()) await menu.click();
 }
 
 async function openAdventure(page: Page): Promise<void> {
-  await page.getByRole("link", { name: "Start Adventure", exact: true }).click();
+  await page.getByRole("link", { name: "Play Jungle Counting Adventure", exact: true }).click();
   await expect(page).toHaveURL(/\/adventure\/jungle-counting$/);
   await expect(page.getByRole("heading", { name: /butterflies/i })).toBeVisible();
   await expect(page.getByRole("group", { name: "3 butterflies" })).toBeVisible();
@@ -91,7 +109,7 @@ test.beforeEach(async ({ page }) => {
   await resetLocalData(page);
 });
 
-test("home loads and starts Jungle Counting Adventure", async ({ page }) => {
+test("the Kids Zone starts Jungle Counting Adventure", async ({ page }) => {
   await openAdventure(page);
 });
 
@@ -205,7 +223,7 @@ test("parent overview uses accurate completed session data and progress has an h
   await expect(page.getByRole("heading", { name: "Detailed Progress" })).toBeVisible();
   await expect(page.getByText("No completed progress yet — finish an adventure!", { exact: true })).toBeVisible();
 
-  await page.goto("/");
+  await page.goto("/kids");
   await completeAdventure(page);
   await page.goto("/parent");
   await expect(page.getByRole("heading", { name: "Parent Dashboard" })).toBeVisible();
@@ -226,7 +244,15 @@ test("sample parent overview is labelled and navigation works on every important
 
   const routes = [
     "/",
+    "/login",
+    "/signup",
+    "/onboarding",
+    "/profiles",
+    "/kids",
+    "/kids/trophies",
+    "/kids/certificate?level=2",
     ADVENTURE_PATH,
+    "/adventure/fruit-basket",
     COMPLETE_PATH,
     "/parent",
     "/parent/progress",
@@ -237,15 +263,20 @@ test("sample parent overview is labelled and navigation works on every important
     expect(response?.status(), route).toBe(200);
   }
 
-  await page.goto("/");
-  await page.getByRole("link", { name: "For Parents" }).click();
+  await page.goto("/kids");
+  await openMainMenu(page);
+  await page.getByRole("link", { name: "Parent Dashboard" }).click();
   await expect(page).toHaveURL(/\/parent$/);
   await page.getByRole("link", { name: "Progress" }).click();
   await expect(page).toHaveURL(/\/parent\/progress$/);
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/parent\/settings$/);
-  await page.getByRole("link", { name: /Explorer/ }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await openMainMenu(page);
+  await page.getByRole("link", { name: "Trophies" }).click();
+  await expect(page).toHaveURL(/\/kids\/trophies$/);
+  await openMainMenu(page);
+  await page.getByRole("link", { name: "Kids Zone" }).click();
+  await expect(page).toHaveURL(/\/kids$/);
 });
 
 test("voice unavailable does not block tap-based learning", async ({ page }) => {
@@ -322,7 +353,7 @@ test("keyboard focus, accessible names, and reduced motion keep the adventure us
   await page.reload();
   expect(await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
 
-  const start = page.getByRole("link", { name: "Start Adventure", exact: true });
+  const start = page.getByRole("link", { name: "Play Jungle Counting Adventure", exact: true });
   await start.focus();
   await expect(start).toBeFocused();
   await page.keyboard.press("Enter");
@@ -338,8 +369,11 @@ test("keyboard focus, accessible names, and reduced motion keep the adventure us
 
 test("home, adventure, and parent pages pass automated accessibility checks", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Jungle Counting Adventure" })).toBeVisible();
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Little explorers, big jungle adventures" })).toBeVisible();
+  await expectNoAccessibilityViolations(page);
+  await page.goto("/kids");
+  await expect(page.getByRole("heading", { name: "Hi, Aanya!" })).toBeVisible();
   await expectNoAccessibilityViolations(page);
   await openAdventure(page);
   await expectNoAccessibilityViolations(page);
@@ -493,4 +527,70 @@ test("a browser that cannot capture audio gets clear help and no voice session i
   expect(sessionRequests).toEqual([]);
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
+});
+
+
+test("a parent signs up, describes their child, and sees adventures for that age", async ({ page }) => {
+  await page.goto("/signup");
+  await page.getByLabel("Your name").fill("Rahul");
+  await page.getByLabel("Email").fill("rahul@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("jungle1234");
+  await page.getByLabel("Confirm password").fill("jungle1234");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/onboarding$/);
+
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByText("Please enter your child's first name.", { exact: true })).toBeVisible();
+  await page.getByLabel("Child's first name").fill("Kabir");
+  await page.getByRole("radio", { name: "Fox" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("radio", { name: "8 years old" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Space", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Create explorer profile" }).click();
+  await expect(page.getByText("Pick at least one thing to focus on.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Animals & nature/ }).click();
+  await page.getByRole("button", { name: "Create explorer profile" }).click();
+
+  await expect(page).toHaveURL(/\/kids$/);
+  await expect(page.getByRole("heading", { name: "Hi, Kabir!" })).toBeVisible();
+  await expect(page.getByText("I heard you love space.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Play River Count Challenge" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Play Jungle Counting Adventure" })).toHaveCount(0);
+});
+
+test("signing out returns to the landing page and keeps the dashboards behind sign-in", async ({ page }) => {
+  await openMainMenu(page);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Little explorers, big jungle adventures" })).toBeVisible();
+  await page.goto("/parent");
+  await expect(page).toHaveURL(/\/login\?next=%2Fparent$/);
+  await page.goto(ADVENTURE_PATH);
+  await expect(page).toHaveURL(/\/login\?next=/);
+  await page.getByLabel("Email").fill("priya@example.com");
+  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByText("That email and password don't match an account on this device.")).toBeVisible();
+});
+
+test("finishing an adventure awards XP, levels up, and unlocks a printable certificate", async ({ page }) => {
+  await completeAdventure(page);
+  const levelUp = page.getByRole("dialog", { name: "Level 2: Jungle Explorer" });
+  await expect(levelUp).toBeVisible();
+  await expect(page.getByText("+75 XP", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "3 of 3 stars" })).toBeVisible();
+  await levelUp.getByRole("link", { name: "See my certificate" }).click();
+  await expect(page).toHaveURL(/\/kids\/certificate\?level=2$/);
+  await expect(page.getByRole("article", { name: "Certificate: Aanya earned the title Jungle Explorer" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Print certificate" })).toBeVisible();
+
+  await page.goto("/kids/certificate?level=5");
+  await expect(page.getByRole("heading", { name: "This certificate is still locked" })).toBeVisible();
+
+  await page.goto("/kids/trophies");
+  await expect(page.getByText("First Footprints").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Certificate for Jungle Explorer" })).toBeVisible();
 });

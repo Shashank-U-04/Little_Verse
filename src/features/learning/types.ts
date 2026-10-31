@@ -1,4 +1,4 @@
-﻿export type VoiceState =
+export type VoiceState =
   | "idle"
   | "requesting_permission"
   | "listening"
@@ -18,7 +18,19 @@ export type MikoState =
 
 export type SkillId = "counting" | "number_recognition";
 
-export type ObjectType = "butterfly" | "banana" | "elephant";
+export type ObjectType =
+  | "butterfly"
+  | "banana"
+  | "elephant"
+  | "apple"
+  | "mango"
+  | "strawberry"
+  | "monkey"
+  | "parrot"
+  | "lion"
+  | "frog"
+  | "fish"
+  | "turtle";
 
 export interface Challenge {
   id: string;
