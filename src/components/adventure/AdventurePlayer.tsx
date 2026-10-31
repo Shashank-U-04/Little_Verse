@@ -12,60 +12,22 @@ import { XP_RULES } from "@/features/gamification/progression";
 import Miko from "@/components/character/Miko";
 import JungleScene from "@/components/explorer/JungleScene";
 import CountableObjects from "@/components/adventure/CountableObjects";
-import VoiceButton from "@/components/voice/VoiceButton";
+import MikoVoiceOrb from "@/components/voice/MikoVoiceOrb";
 import VoiceConsentDialog from "@/components/voice/VoiceConsentDialog";
 import MicHelp from "@/components/voice/MicHelp";
-import { browserMicEnvironment, micEnvironmentProblem, micProblemFromBolnaError, micProblemFromMediaError, micProblemFromRecognitionError, type MicProblemKind } from "@/components/voice/micProblem";
+import { browserMicEnvironment, micEnvironmentProblem, micProblemFromBolnaError, type MicProblemKind } from "@/components/voice/micProblem";
 import { BolnaWebCall, type CallError } from "@bolna/web-call";
 import { Button } from "@/components/ui/button";
-import { getHint, parseVoiceAnswer, validateAnswer } from "@/features/learning/validation";
+import { getHint, validateAnswer } from "@/features/learning/validation";
 import { createNewSession, saveSession } from "@/lib/storage";
 import { BolnaCallAdapter, type BolnaUiSnapshot } from "@/lib/bolna/bolnaCallAdapter";
-import { MicrophoneOwnership } from "@/lib/voice/microphoneOwnership";
 import { BrowserSpeechController, type SpeechUtterancePort } from "@/lib/voice/browserSpeechController";
 import { requestBolnaSession, type LessonPointer } from "@/lib/voice/bolnaSession";
 import { initialTutorVoiceMode, readVoiceConsent, saveVoiceConsent, type TutorVoiceMode } from "@/lib/voice/voiceConsent";
 import type { VoiceStatusResponse } from "@/lib/voice/voiceStatus";
-import type { AdventureDefinition, Challenge, MikoState, Session, VoiceState } from "@/features/learning/types";
+import type { AdventureDefinition, Challenge, MikoState, Session } from "@/features/learning/types";
 import type { ChildProfile } from "@/features/family/profile";
-type SpeechRecognitionEventLike = {
-  results: ArrayLike<ArrayLike<{ transcript?: string }>>;
-};
-
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  continuous: boolean;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
 const CELEBRATIONS = ["You did it! Amazing counting! \u2B50","Brilliant \u2014 you got it right!","Wonderful! You counted perfectly!","Fantastic job! High five! \u2728"] as const;
-/** Connection wording reflects SDK events only; nothing claims a live call before call-start. */
-function bolnaStatusText(state: BolnaUiSnapshot["state"], ready: boolean, holdsMic: boolean): string {
-  if (!ready) return "Miko's voice: not available";
-  switch (state) {
-    case "requesting_permission": return "Allow the microphone to talk to Miko";
-    case "connecting": return "Connecting to Miko…";
-    case "active": return "Live: Miko can hear you";
-    case "ending": return "Hanging up…";
-    case "error": return holdsMic ? "Hang-up not confirmed yet" : "Miko's voice: not connected";
-    default: return "Miko's voice: not connected";
-  }
-}
 function browserStorage(): Storage | null { try { return typeof window==="undefined" ? null : window.localStorage; } catch { return null; } }
 function pickCelebration(): string { return CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)]!; }
 function computeHighlighted(challenge: Challenge, hintLevel: number, wasCorrect: boolean): number { if (wasCorrect) return challenge.objectCount; if (hintLevel >= 2) return challenge.objectCount; if (hintLevel >= 1) return Math.min(challenge.objectCount, hintLevel+1); return 0; }
@@ -78,7 +40,6 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
   const [feedback,setFeedback]=useState<{type:"correct"|"encourage"|"hint";text:string}|null>(null);
   const [selected,setSelected]=useState<number|null>(null);
   const [isBusy,setIsBusy]=useState(false);
-  const [voiceState,setVoiceState]=useState<VoiceState>("idle");
   const [mikoState,setMikoState]=useState<MikoState>("idle");
   const [tappedIndices,setTappedIndices]=useState<Set<number>>(new Set());
   const [showNext,setShowNext]=useState(false);
@@ -86,30 +47,22 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
   // XP shown while playing; the saved session is what progression actually counts.
   const [xpEarned,setXpEarned]=useState(0);
   const [xpPop,setXpPop]=useState<{amount:number;key:number}|null>(null);
-  const [voiceError,setVoiceError]=useState<string|null>(null);
   const [bolnaSnapshot,setBolnaSnapshot]=useState<BolnaUiSnapshot>({state:"idle",error:null});
-  const [microphoneOwner,setMicrophoneOwner]=useState<"browser-recognition"|"bolna-call"|null>(null);
   const advanceTimeoutRef=useRef<number|null>(null);
   const resetSelectedTimeoutRef=useRef<number|null>(null);
-  const recognitionRef=useRef<SpeechRecognitionLike|null>(null);
-  const mediaStreamRef=useRef<MediaStream|null>(null);
   const submitLockRef=useRef(false);
   const advanceLockRef=useRef(false);
   const sessionInitializedRef=useRef(false);
-  const voiceParseTimeoutRef=useRef<number|null>(null);
-  const voiceInputLockRef=useRef(false);
   // Bolna is the tutor's voice; device speech runs only when explicitly chosen.
   const [voiceStatus,setVoiceStatus]=useState<VoiceStatusResponse|null>(null);
   const [tutorVoice,setTutorVoiceState]=useState<TutorVoiceMode>("off");
   const tutorVoiceRef=useRef<TutorVoiceMode>("off");
-  const tutorVoiceChosenRef=useRef(false);
   const [hasVoiceConsent,setHasVoiceConsent]=useState(false);
   const [consentDialogOpen,setConsentDialogOpen]=useState(false);
   const [voiceNotice,setVoiceNotice]=useState<string|null>(null);
   // Microphone problems, classified so a grown-up gets the right fix (see MicHelp).
   const [bolnaCallError,setBolnaCallError]=useState<CallError|null>(null);
   const [bolnaPreflightProblem,setBolnaPreflightProblem]=useState<MicProblemKind|null>(null);
-  const [recognitionProblem,setRecognitionProblem]=useState<MicProblemKind|null>(null);
   const lessonRef=useRef<LessonPointer>({adventureId:adventure.id, challengeIndex:0});
   // getSession runs inside call.start() from a click, never during render; it reads the latest challenge.
   // The extra error listener keeps the SDK's original cause (e.g. NotFoundError), which the adapter summarises.
@@ -134,27 +87,10 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
       setTimeout:(callback,delayMs)=>window.setTimeout(callback,delayMs),
       clearTimeout:(timerId)=>window.clearTimeout(timerId),
     },
-    onStart:()=>{
-      setMikoState("speaking");
-      setVoiceState((current)=>current==="unavailable"||current==="error"?current:"speaking");
-    },
-    onFinish:()=>{
-      setMikoState((current)=>current==="speaking"?"idle":current);
-      setVoiceState((current)=>current==="speaking"?"idle":current);
-    },
+    onStart:()=>setMikoState("speaking"),
+    onFinish:()=>setMikoState((current)=>current==="speaking"?"idle":current),
   }));
-  const microphoneOwnershipRef=useRef(new MicrophoneOwnership());
-  const recognitionGenerationRef=useRef(0);
   const ch: Challenge|undefined = challenges[idx];
-  const claimMicrophone=useCallback((owner:"browser-recognition"|"bolna-call")=>{
-    const claimed=microphoneOwnershipRef.current.claim(owner);
-    if(claimed) setMicrophoneOwner(owner);
-    return claimed;
-  },[]);
-  const releaseMicrophone=useCallback((owner:"browser-recognition"|"bolna-call")=>{
-    microphoneOwnershipRef.current.release(owner);
-    setMicrophoneOwner(microphoneOwnershipRef.current.current);
-  },[]);
   const isLast = idx===challenges.length-1;
   const wasCorrect = feedback?.type==="correct";
   const highlighted = wasCorrect ? (ch?.objectCount??0) : revealAnswer ? (ch?.objectCount??0) : computeHighlighted(ch as Challenge, hintLevel, false) || 0;
@@ -165,7 +101,6 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
   const stopSpeaking=useCallback(()=>{
     speechController.cancelAll();
     setMikoState("idle");
-    setVoiceState((current)=>current==="speaking"?"idle":current);
   },[speechController]);
   const setTutorVoice=useCallback((mode:TutorVoiceMode)=>{
     tutorVoiceRef.current=mode;
@@ -181,8 +116,7 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
       status={provider:null,bolnaReady:false,reason:"Voice status could not be checked.",accessCodeRequired:false,unlocked:false};
     }
     setVoiceStatus(status);
-    // Never override a voice the grown-up or child picked explicitly.
-    if(!tutorVoiceChosenRef.current) setTutorVoice(initialTutorVoiceMode(status.provider));
+    setTutorVoice(initialTutorVoiceMode(status.provider));
     return status;
   },[setTutorVoice]);
   useEffect(()=>{
@@ -200,13 +134,10 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
       stopSpeaking();
       return;
     }
-    if(snapshot.state==="ended"||snapshot.state==="error"){
-      stopSpeaking();
-      releaseMicrophone("bolna-call");
-    }
+    if(snapshot.state==="ended"||snapshot.state==="error") stopSpeaking();
     // A failed start may mean the voice pass expired; re-read the server's view.
     if(snapshot.state==="error") void refreshVoiceStatus();
-  }),[bolnaAdapter,refreshVoiceStatus,releaseMicrophone,stopSpeaking]);
+  }),[bolnaAdapter,refreshVoiceStatus,stopSpeaking]);
   useEffect(()=>{
     if(!sessionInitializedRef.current){
       sessionInitializedRef.current=true;
@@ -215,20 +146,12 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
       setSession(s);
       saveSession(s);
     }
-    const hasRec=typeof window!=="undefined" && Boolean(window.SpeechRecognition||window.webkitSpeechRecognition);
-    // Feature detection is only available after client hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setVoiceState(hasRec?"idle":"unavailable");
     return()=>{
       if(advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
       if(resetSelectedTimeoutRef.current) window.clearTimeout(resetSelectedTimeoutRef.current);
-      if(voiceParseTimeoutRef.current) window.clearTimeout(voiceParseTimeoutRef.current);
       submitLockRef.current=false;
       advanceLockRef.current=false;
-      voiceInputLockRef.current=false;
       stopSpeaking();
-      if(recognitionRef.current){ try{recognitionRef.current.abort();}catch{}}
-      if(mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach(t=>t.stop());
       bolnaAdapter.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +164,6 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
     if(!ch||!session) return;
     // React batches pointer events, so a state-only guard can still allow two
     // taps from the same render. The ref closes that race before state work.
-    if(via==="tap" && voiceInputLockRef.current) return;
     if(submitLockRef.current || (isBusy && feedback?.type==="correct") || (feedback?.type==="correct" && showNext) || isBusy) return;
     submitLockRef.current=true;
     const isCorrect=validateAnswer(ch,n);
@@ -301,90 +223,14 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
   const handleObjectTap=useCallback((i:number)=>{
     setTappedIndices(prev=>{ const n=new Set(prev); if(n.has(i)) n.delete(i); else n.add(i); return n; });
   },[]);
-  const startRecognition=useCallback(async()=>{
-    if(!ch || bolnaAdapter.ownsAudio()) return;
-    if(!claimMicrophone("browser-recognition")) return;
-    const SR: SpeechRecognitionConstructor | undefined = typeof window!=="undefined" ? (window.SpeechRecognition||window.webkitSpeechRecognition) : undefined;
-    if(!SR){ releaseMicrophone("browser-recognition"); setVoiceState("unavailable"); setVoiceError("Voice isn't available on this device \u2014 tap a number instead."); return; }
-    const generation=++recognitionGenerationRef.current;
-    stopSpeaking();
-    setVoiceState("requesting_permission"); setVoiceError(null); setRecognitionProblem(null); setMikoState("listening");
-    voiceInputLockRef.current=true;
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-      if(generation!==recognitionGenerationRef.current){ stream.getTracks().forEach(t=>t.stop()); releaseMicrophone("browser-recognition"); return; }
-      mediaStreamRef.current=stream; stream.getTracks().forEach(t=>t.stop()); mediaStreamRef.current=null;
-    }catch(error){
-      releaseMicrophone("browser-recognition");
-      if(generation!==recognitionGenerationRef.current) return;
-      voiceInputLockRef.current=false;
-      setRecognitionProblem(micProblemFromMediaError(error));
-      setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); setMikoState("encouraging"); return;
-    }
-    if(generation!==recognitionGenerationRef.current){ releaseMicrophone("browser-recognition"); return; }
-    let rec: SpeechRecognitionLike;
-    try{
-      // construct via window SR
-      rec=new SR();
-    }catch{
-      releaseMicrophone("browser-recognition");
-      voiceInputLockRef.current=false;
-      setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); return;
-    }
-    recognitionRef.current=rec; rec.lang="en-US"; rec.interimResults=false; rec.maxAlternatives=1; rec.continuous=false;
-    setVoiceState("listening");
-    rec.onresult=(e)=>{
-      if(generation!==recognitionGenerationRef.current) return;
-      const transcript: string = e.results[0]?.[0]?.transcript ?? "";
-      setVoiceState("processing"); setMikoState("thinking");
-      voiceParseTimeoutRef.current=window.setTimeout(()=>{
-        if(generation!==recognitionGenerationRef.current) return;
-        voiceInputLockRef.current=false;
-        const parsed=parseVoiceAnswer(transcript);
-        if(parsed===null){
-          setFeedback({type:"encourage", text:"I didn't catch that \u2014 try tapping a number!"}); setMikoState("encouraging"); setVoiceState("idle"); speak("I didn't catch that \u2014 try tapping a number!"); return;
-        }
-        setVoiceState("idle"); submitAnswer(parsed,"voice");
-      },350);
-    };
-    rec.onerror=(ev)=>{
-      if(generation!==recognitionGenerationRef.current) return;
-      const err=(ev as {error?:string})?.error ?? "unknown";
-      voiceInputLockRef.current=false;
-      setRecognitionProblem(micProblemFromRecognitionError(err));
-      if(err==="not-allowed"||err==="permission-denied"){ setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); }
-      else if(err==="no-speech"){ setVoiceState("idle"); setFeedback({type:"encourage", text:"I didn't hear anything \u2014 try again or tap a number!"}); setMikoState("encouraging"); }
-      else { setVoiceState("error"); setVoiceError("Something went wrong \u2014 tap a number instead."); }
-      setMikoState(s=> (s==="listening"||s==="thinking"?"idle":s));
-    };
-    rec.onend=()=>{
-      releaseMicrophone("browser-recognition");
-      if(generation!==recognitionGenerationRef.current) return;
-      setVoiceState(prev=>prev==="listening"?"idle":prev);
-      setMikoState(s=>s==="listening"?"idle":s);
-      recognitionRef.current=null;
-    };
-    try{ rec.start(); }catch{ releaseMicrophone("browser-recognition"); voiceInputLockRef.current=false; setVoiceState("error"); setVoiceError("Microphone blocked \u2014 tap a number instead."); recognitionRef.current=null; }
-  },[bolnaAdapter,ch,speak,stopSpeaking,submitAnswer,claimMicrophone,releaseMicrophone]);
   const needsGrownUp=!hasVoiceConsent||(voiceStatus?.provider==="bolna"&&voiceStatus.accessCodeRequired&&!voiceStatus.unlocked);
   const handleConsentAccepted=useCallback(()=>{
     saveVoiceConsent(browserStorage(), new Date());
     setHasVoiceConsent(true);
     setConsentDialogOpen(false);
-    setVoiceNotice("Voice is on. Tap the voice button again to start.");
+    setVoiceNotice("Voice is on. Tap the orb to talk to Miko.");
     void refreshVoiceStatus();
   },[refreshVoiceStatus]);
-  const chooseDeviceVoice=useCallback(()=>{
-    if(bolnaAdapter.ownsAudio()) return;
-    tutorVoiceChosenRef.current=true;
-    setTutorVoice("device");
-    if(ch) speak(ch.prompt);
-  },[bolnaAdapter,ch,setTutorVoice,speak]);
-  const chooseBolnaVoice=useCallback(()=>{
-    tutorVoiceChosenRef.current=true;
-    stopSpeaking();
-    setTutorVoice("bolna");
-  },[setTutorVoice,stopSpeaking]);
   const handleBolnaStart=useCallback(()=>{
     setBolnaCallError(null);
     // A browser that cannot capture audio at all gets clear help instead of a session it cannot use.
@@ -392,52 +238,21 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
     setBolnaPreflightProblem(environmentProblem);
     if(environmentProblem) return;
     if(needsGrownUp){ setVoiceNotice(null); setConsentDialogOpen(true); return; }
-    if(microphoneOwner!==null || recognitionRef.current || voiceState==="requesting_permission"){
-      setVoiceError("Finish voice answer capture before starting a conversation.");
-      return;
-    }
-    if(!claimMicrophone("bolna-call")) return;
+    if(bolnaAdapter.ownsAudio()) return;
     stopSpeaking();
-    // Starting Miko's call makes Bolna the tutor voice again.
-    tutorVoiceChosenRef.current=true;
+    // Starting Miko's call makes Bolna the tutor voice.
     setTutorVoice("bolna");
     setVoiceNotice(null);
-    setVoiceError(null);
     // Call start synchronously from this click so the browser preserves its
     // user-gesture permission for microphone and audio playback.
-    void bolnaAdapter.start().catch(()=>{
-      releaseMicrophone("bolna-call");
-      setBolnaSnapshot(bolnaAdapter.getSnapshot());
-    });
-  },[bolnaAdapter,claimMicrophone,microphoneOwner,needsGrownUp,releaseMicrophone,setTutorVoice,stopSpeaking,voiceState]);
+    void bolnaAdapter.start().catch(()=>setBolnaSnapshot(bolnaAdapter.getSnapshot()));
+  },[bolnaAdapter,needsGrownUp,setTutorVoice,stopSpeaking]);
   const handleBolnaStop=useCallback(()=>{
     void bolnaAdapter.stop().catch(()=>setBolnaSnapshot(bolnaAdapter.getSnapshot()));
   },[bolnaAdapter]);
-  const handleTapAnswer=useCallback((n:number)=>{
-    const cancelRecognition=()=>{
-      recognitionGenerationRef.current++;
-      voiceInputLockRef.current=false;
-      if(voiceParseTimeoutRef.current){ window.clearTimeout(voiceParseTimeoutRef.current); voiceParseTimeoutRef.current=null; }
-      if(recognitionRef.current){ try{recognitionRef.current.abort();}catch{} }
-      setVoiceState((current)=>current==="unavailable"?current:"idle");
-      setMikoState((current)=>current==="listening"||current==="thinking"?"idle":current);
-    };
-    cancelRecognition();
-    // Tapping never uses the microphone, so a live Miko call keeps going.
-    submitAnswer(n,"tap");
-  },[submitAnswer]);
-  const handleVoicePress=useCallback(()=>{
-    if(bolnaAdapter.ownsAudio()) return;
-    if(voiceState==="idle"&&!hasVoiceConsent){ setVoiceNotice(null); setConsentDialogOpen(true); return; }
-    if(voiceState==="idle"){ void startRecognition(); return; }
-    if(voiceState==="listening"){ try{recognitionRef.current?.stop();}catch{} voiceInputLockRef.current=false; setVoiceState("idle"); setMikoState("idle"); return; }
-    if(voiceState==="error"){ setVoiceState("idle"); setVoiceError(null); setRecognitionProblem(null); setMikoState("idle"); return; }
-    if(voiceState==="requesting_permission"||voiceState==="processing"||voiceState==="speaking") return;
-  },[bolnaAdapter,hasVoiceConsent,voiceState,startRecognition]);
-  const retryRecognition=useCallback(()=>{
-    setVoiceError(null); setRecognitionProblem(null);
-    void startRecognition();
-  },[startRecognition]);
+  // Tapping never uses the microphone, so a live Miko call keeps going.
+  const handleTapAnswer=useCallback((n:number)=>submitAnswer(n,"tap"),[submitAnswer]);
+  const subscribeAgentLevel=useCallback((listener:(level:number)=>void)=>bolnaAdapter.subscribeAgentLevel(listener),[bolnaAdapter]);
   if(!session||!ch){
     return (
       <div className="relative isolate flex min-h-dvh flex-col">
@@ -490,7 +305,7 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
               {wasCorrect && <ConfettiBurst pieces={36}/>}
               <div className="p-5 sm:p-7">
                 <div className="flex flex-col items-center">
-                  <Miko state={mikoState} size="md" message={feedback?.text ?? (mikoState==="listening"?"I'm listening — say a number!":mikoState==="thinking"?"Hmm, let me think…":undefined)} />
+                  <Miko state={mikoState} size="md" message={feedback?.text} />
                   <div className="mt-3 flex w-full flex-col items-center gap-2 text-center">
                     <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#E8A200]">{adventure.title}</p>
                     <h1 className="text-balance font-display text-[24px] font-bold leading-tight tracking-tight text-[#123D30] sm:text-[28px]">{ch.prompt}</h1>
@@ -519,7 +334,7 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
                         <span className="flex-1">{feedback.text}</span>
                       </motion.div>
                     ) : (
-                      <p className="px-1 text-center text-sm font-semibold text-[#53645B]">Tap a number below {"—"} or use your voice!</p>
+                      <p className="px-1 text-center text-sm font-semibold text-[#53645B]">Tap a number below to answer!</p>
                     )}
                   </AnimatePresence>
                   <AnimatePresence>
@@ -560,52 +375,27 @@ export default function AdventurePlayer({adventure,learner}:{adventure:Adventure
                   {!showNext && wasCorrect && <span className="text-xs font-semibold text-[#205C43]/60">Great job {"—"} get ready for the next one{"…"}</span>}
                 </div>
                 <div className="mt-6 flex flex-col items-center gap-3">
-                  <div className="flex w-full items-center gap-3"><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/><span className="text-[11px] font-bold uppercase tracking-widest text-[#53645B]">or speak</span><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/></div>
+                  <div className="flex w-full items-center gap-3"><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/><span className="text-[11px] font-bold uppercase tracking-widest text-[#53645B]">talk with Miko</span><span className="h-px flex-1 bg-[#205C43]/10" aria-hidden/></div>
                   {voiceStatus?.provider==="bolna" && (
-                    <div className="flex flex-col items-center gap-2">
-                      <p className="inline-flex items-center gap-2 rounded-full border border-[#205C43]/15 bg-white px-3 py-1 text-xs font-semibold text-[#24352B]" aria-live="polite" data-testid="tutor-voice-status">
-                        <span aria-hidden className={["h-2 w-2 rounded-full", bolnaSnapshot.state==="active"?"bg-[#2E8B57]":bolnaSnapshot.state==="connecting"||bolnaSnapshot.state==="requesting_permission"?"bg-[#E0A100]":"bg-[#9AA59F]"].join(" ")}/>
-                        {bolnaStatusText(bolnaSnapshot.state, voiceStatus.bolnaReady, microphoneOwner==="bolna-call")}
-                      </p>
-                      {voiceStatus.bolnaReady && (bolnaSnapshot.state==="idle"||bolnaSnapshot.state==="ended"||(bolnaSnapshot.state==="error"&&microphoneOwner!=="bolna-call") ? (
-                        <Button type="button" variant="secondary" onClick={handleBolnaStart} disabled={microphoneOwner!==null||voiceState==="requesting_permission"||voiceState==="processing"} >Talk to Miko</Button>
-                      ) : bolnaSnapshot.state==="ending" ? (
-                        <Button type="button" variant="secondary" disabled>Hanging up{"…"}</Button>
-                      ) : (
-                        <Button type="button" variant="coral" onClick={handleBolnaStop}>{bolnaSnapshot.state==="error"?"Retry hanging up":bolnaSnapshot.state==="requesting_permission"||bolnaSnapshot.state==="connecting"?"Cancel":"End talk with Miko"}</Button>
-                      ))}
-                      {bolnaSnapshot.state==="active" && <p className="max-w-xs text-center text-xs text-[#53645B]">Talk with Miko, and tap a number on the screen to answer.</p>}
-                      {!voiceStatus.bolnaReady && <p className="max-w-xs text-center text-xs text-[#53645B]">Miko&apos;s voice isn&apos;t available here right now. Tapping the numbers works great!</p>}
+                    <>
+                      <MikoVoiceOrb callState={bolnaSnapshot.state} ready={voiceStatus.bolnaReady} holdsAudio={bolnaOwnsAudio} subscribeAgentLevel={subscribeAgentLevel} onStart={handleBolnaStart} onStop={handleBolnaStop}/>
                       {bolnaMicProblem
                         ? <MicHelp problem={bolnaMicProblem} onRetry={bolnaMicProblem==="unsupported"?undefined:handleBolnaStart}/>
                         : bolnaSnapshot.error && <p className="max-w-xs text-center text-xs font-semibold text-[#B4442F]" role="alert">{bolnaSnapshot.error}</p>}
-                    </div>
+                    </>
                   )}
                   {voiceNotice && <p className="max-w-xs text-center text-xs font-semibold text-[#205C43]" role="status">{voiceNotice}</p>}
-                  <VoiceButton state={voiceState} onPress={handleVoicePress} hideHint={voiceState==="error"&&recognitionProblem!==null} disabled={voiceState==="processing"||voiceState==="requesting_permission"||voiceState==="speaking"||bolnaOwnsAudio}/>
-                  {voiceState==="error" && (recognitionProblem
-                    ? <MicHelp problem={recognitionProblem} onRetry={recognitionProblem==="unsupported"?undefined:retryRecognition}/>
-                    : voiceError && <p className="max-w-[28ch] text-center text-xs font-semibold leading-4 text-[#B4442F]" role="alert">{voiceError}</p>)}
-                  {voiceState==="unavailable" && <p className="max-w-[28ch] text-center text-xs font-medium leading-4 text-[#53645B]">Voice isn&apos;t available on this device {"—"} tapping a number works great!</p>}
-                  {voiceStatus!==null && voiceStatus.provider!=="browser" && (tutorVoice==="device" ? (
-                    <p className="max-w-xs text-center text-xs text-[#53645B]">
-                      Device voice is on (this device&apos;s built-in voice, not Miko&apos;s).{" "}
-                      <button type="button" onClick={chooseBolnaVoice} className="rounded font-semibold text-[#205C43] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43]">Turn device voice off</button>
-                    </p>
-                  ) : (
-                    <button type="button" onClick={chooseDeviceVoice} disabled={bolnaOwnsAudio} className="rounded-full px-2 py-1 text-xs font-semibold text-[#205C43] underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#205C43] disabled:cursor-not-allowed disabled:opacity-50">Use device voice instead</button>
-                  ))}
                   {voiceStatus?.provider==="browser" && <p className="max-w-xs text-center text-xs text-[#53645B]">Voice: this device&apos;s built-in voice.</p>}
                 </div>
               </div>
             </div>
           </motion.div>
         </AnimatePresence>
-        <p className="mx-auto rounded-full bg-white/85 px-4 py-1.5 text-center text-[11px] font-semibold leading-4 text-[#205C43] backdrop-blur">
-          {tutorVoice==="device"
-            ? <>Tip: tap <span className="inline-flex align-middle"><Volume2 className="h-3 w-3" aria-hidden/></span> Hear again to repeat the question.</>
-            : <>Tip: tap {"“"}Talk to Miko{"”"} to chat while you count.</>}
-        </p>
+        {tutorVoice==="device" && (
+          <p className="mx-auto rounded-full bg-white/85 px-4 py-1.5 text-center text-[11px] font-semibold leading-4 text-[#205C43] backdrop-blur">
+            Tip: tap <span className="inline-flex align-middle"><Volume2 className="h-3 w-3" aria-hidden/></span> Hear again to repeat the question.
+          </p>
+        )}
       </main>
       <VoiceConsentDialog
         open={consentDialogOpen}

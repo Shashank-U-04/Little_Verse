@@ -22,6 +22,7 @@ export interface BolnaCallClient {
 
 type CallFactory = () => BolnaCallClient;
 type SnapshotListener = (snapshot: BolnaUiSnapshot) => void;
+type LevelListener = (level: number) => void;
 const AUDIO_OWNED_STATES = new Set<BolnaUiState>([
   "requesting_permission",
   "connecting",
@@ -76,6 +77,8 @@ export class BolnaCallAdapter {
   private startPromise: Promise<void> | null = null;
   private stopPromise: Promise<void> | null = null;
   private listeners = new Set<SnapshotListener>();
+  private agentLevel = 0;
+  private levelListeners = new Set<LevelListener>();
 
   constructor(createCall: CallFactory = () => new BolnaWebCall({ sessionUrl: "/api/bolna-session" })) {
     this.createCall = createCall;
@@ -97,6 +100,13 @@ export class BolnaCallAdapter {
     this.listeners.add(listener);
     listener(this.getSnapshot());
     return () => this.listeners.delete(listener);
+  }
+
+  /** Miko's speaking volume (0..1), about ten updates a second while a call is live. */
+  subscribeAgentLevel(listener: LevelListener): () => void {
+    this.levelListeners.add(listener);
+    listener(this.agentLevel);
+    return () => this.levelListeners.delete(listener);
   }
 
   async start(): Promise<void> {
@@ -135,12 +145,16 @@ export class BolnaCallAdapter {
     const onMediaPermission: BolnaWebCallEvents["media-permission"] = () => {
       if (this.call === call && this.state === "connecting") this.setState("requesting_permission");
     };
+    const onVolumeLevel: BolnaWebCallEvents["volume-level"] = (level) => {
+      if (this.call === call) this.setAgentLevel(level);
+    };
 
     call.on("state-change", onStateChange);
     call.on("call-start", onCallStart);
     call.on("call-end", onCallEnd);
     call.on("error", onError);
     call.on("media-permission", onMediaPermission);
+    call.on("volume-level", onVolumeLevel);
 
     const detach = () => {
       call.off("state-change", onStateChange);
@@ -148,6 +162,7 @@ export class BolnaCallAdapter {
       call.off("call-end", onCallEnd);
       call.off("error", onError);
       call.off("media-permission", onMediaPermission);
+      call.off("volume-level", onVolumeLevel);
     };
     this.detachForCall = detach;
 
@@ -207,7 +222,15 @@ export class BolnaCallAdapter {
     this.detachForCall = null;
     this.call = null;
     this.error = error;
+    this.setAgentLevel(0);
     this.setState(state);
+  }
+
+  private setAgentLevel(level: number): void {
+    const next = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
+    if (next === this.agentLevel) return;
+    this.agentLevel = next;
+    this.levelListeners.forEach((listener) => listener(next));
   }
 
   private setState(state: BolnaUiState): void {
