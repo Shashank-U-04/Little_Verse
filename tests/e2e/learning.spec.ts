@@ -279,73 +279,27 @@ test("sample parent overview is labelled and navigation works on every important
   await expect(page).toHaveURL(/\/kids$/);
 });
 
-test("voice unavailable does not block tap-based learning", async ({ page }) => {
-  await page.goto("about:blank");
-  await page.addInitScript(() => {
-    Object.defineProperty(window, "SpeechRecognition", { value: undefined, configurable: true });
-    Object.defineProperty(window, "webkitSpeechRecognition", { value: undefined, configurable: true });
-  });
-  await resetLocalData(page);
+test("when Miko's voice is not set up, the orb rests and tapping still works", async ({ page }) => {
+  await page.route("**/api/voice/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ provider: "bolna", bolnaReady: false, reason: "Bolna is not configured on the server.", accessCodeRequired: true, unlocked: false }),
+  }));
   await openAdventure(page);
-  await expect(page.getByRole("button", { name: "Voice unavailable — tap a number instead" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Miko's voice isn't available" })).toBeDisabled();
+  await expect(page.getByTestId("tutor-voice-status")).toContainText("Tapping the numbers works great!");
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
 });
 
-test("permission denial leaves tap answers available", async ({ page }) => {
-  await page.goto("about:blank");
-  await page.addInitScript(() => {
-    class DeniedRecognition {
-      lang = "";
-      interimResults = false;
-      maxAlternatives = 1;
-      continuous = false;
-      onresult: ((event: unknown) => void) | null = null;
-      onerror: ((event: { error?: string }) => void) | null = null;
-      onend: (() => void) | null = null;
-      start(): void {
-        this.onerror?.({ error: "not-allowed" });
-        this.onend?.();
-      }
-      stop(): void {
-        this.onend?.();
-      }
-      abort(): void {
-        this.onend?.();
-      }
-    }
-    Object.defineProperty(window, "SpeechRecognition", { value: DeniedRecognition, configurable: true });
-    Object.defineProperty(window, "webkitSpeechRecognition", { value: undefined, configurable: true });
-    if (navigator.mediaDevices) {
-      Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
-        value: () => Promise.reject(new DOMException("Permission denied", "NotAllowedError")),
-        configurable: true,
-      });
-    }
-  });
-  await resetLocalData(page);
-  await grantVoiceConsent(page);
+test("the Miko orb is the only voice control and starts at rest", async ({ page }) => {
   await openAdventure(page);
-  await page.getByRole("button", { name: /activate microphone/i }).click();
-  const help = page.getByTestId("mic-help");
-  await expect(help).toHaveAttribute("data-problem", "denied");
-  await expect(help).toContainText("The microphone is blocked");
-  await expect(help).toContainText("choose Allow");
-  await expect(help.getByRole("button", { name: "Try again" })).toBeVisible();
-
-  // Only the panel shows "Try again"; the mic button keeps its accessible name and keyboard access.
-  await expect(page.getByTestId("voice-button-hint")).toHaveCount(0);
-  await expect(page.getByText("Try again", { exact: true })).toHaveCount(1);
-  const micButton = page.getByRole("button", { name: "Error — try again" });
-  await expect(micButton).toBeEnabled();
-  await micButton.focus();
-  await page.keyboard.press("Enter");
-  await expect(help).toHaveCount(0);
-  await expect(page.getByTestId("voice-button-hint")).toHaveText("Tap to answer");
-  await expect(page.getByRole("button", { name: /activate microphone/i })).toBeVisible();
-
-  await answer(page, 3);
-  await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();
+  const orb = page.getByRole("button", { name: "Talk to Miko", exact: true });
+  await expect(orb).toBeEnabled();
+  await expect(page.locator("[data-orb-state]")).toHaveAttribute("data-orb-state", "idle");
+  await expect(page.getByTestId("tutor-voice-status")).toHaveText("Tap the orb to talk to Miko");
+  await expect(page.getByRole("button", { name: /activate microphone/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Use device voice instead" })).toHaveCount(0);
 });
 
 test("keyboard focus, accessible names, and reduced motion keep the adventure usable", async ({ page }) => {
@@ -387,7 +341,7 @@ test("with Bolna selected, the device voice never speaks on its own", async ({ p
   await spyOnDeviceSpeech(page);
   await resetLocalData(page);
   await openAdventure(page);
-  await expect(page.getByTestId("tutor-voice-status")).toContainText("Miko's voice");
+  await expect(page.getByTestId("tutor-voice-status")).toContainText("talk to Miko");
   await answer(page, 2);
   await expectFeedback(page, "Good try! Let's try again.");
   await answer(page, 3);
@@ -396,20 +350,6 @@ test("with Bolna selected, the device voice never speaks on its own", async ({ p
   await page.waitForTimeout(800);
   expect(await speechCalls(page)).toEqual([]);
   await expect(page.getByRole("button", { name: "Hear again — repeat the question" })).toHaveCount(0);
-});
-
-test("the device voice is an explicit, labelled opt-in", async ({ page }) => {
-  await page.goto("about:blank");
-  await spyOnDeviceSpeech(page);
-  await resetLocalData(page);
-  await openAdventure(page);
-  await page.getByRole("button", { name: "Use device voice instead" }).click();
-  await expect(page.getByText("Device voice is on (this device's built-in voice, not Miko's).")).toBeVisible();
-  expect(await speechCalls(page)).toEqual(["Look at the butterflies! Can you count them?"]);
-  await page.getByRole("button", { name: "Turn device voice off" }).click();
-  await answer(page, 2);
-  await page.waitForTimeout(600);
-  expect(await speechCalls(page)).toEqual(["Look at the butterflies! Can you count them?"]);
 });
 
 test("Talk to Miko asks a grown-up for consent before any voice session", async ({ page }) => {
@@ -439,7 +379,7 @@ test("a failed Miko connection is reported honestly and tapping keeps working", 
   await openAdventure(page);
   await page.getByRole("button", { name: "Talk to Miko", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "isn't set up here yet" })).toBeVisible();
-  await expect(page.getByTestId("tutor-voice-status")).toContainText("not connected");
+  await expect(page.getByTestId("tutor-voice-status")).toContainText("isn't connected");
   await expect(page.getByTestId("tutor-voice-status")).not.toContainText("Live");
   await answer(page, 3);
   await expect(page.getByRole("button", { name: "Go to next challenge" })).toBeVisible();

@@ -125,6 +125,29 @@ test("remote hangup is reflected as ended and failed call-end is an error", asyn
   assert.match(failedAdapter.getSnapshot().error ?? "", /ended unexpectedly/);
 });
 
+test("Miko's voice level is forwarded while the call is live and resets to zero when it ends", async () => {
+  const call = new MockCall();
+  const adapter = new BolnaCallAdapter(() => call);
+  const levels: number[] = [];
+  const unsubscribe = adapter.subscribeAgentLevel((level) => levels.push(level));
+  assert.deepEqual(levels, [0]);
+
+  await adapter.start();
+  call.emit("volume-level", 0.42);
+  call.emit("volume-level", 1.7);
+  call.emit("volume-level", -0.2);
+  assert.deepEqual(levels, [0, 0.42, 1, 0]);
+
+  call.emit("volume-level", 0.6);
+  await adapter.stop();
+  assert.equal(levels.at(-1), 0);
+  assert.equal(call.listenerCount(), 0);
+
+  unsubscribe();
+  call.emit("volume-level", 0.9);
+  assert.equal(levels.at(-1), 0);
+});
+
 test("permission denial and connection failure produce safe generic errors", async () => {
   const deniedCall = new MockCall();
   deniedCall.startImpl = async () => { throw { code: "microphone_denied" }; };
