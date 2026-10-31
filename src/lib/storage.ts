@@ -1,6 +1,14 @@
-﻿import type { Challenge, Session } from "@/features/learning/types";
+import type { Challenge, Session } from "@/features/learning/types";
+import { isObjectType } from "@/features/learning/objects";
 
-const STORAGE_KEY = "littleverse:sessions";
+export const SESSIONS_KEY = "littleverse:sessions";
+const STORAGE_KEY = SESSIONS_KEY;
+/** Fired on window after any LittleVerse write, so open views re-read storage. */
+export const STORAGE_EVENT = "littleverse:storage";
+
+export function notifyStorageChange(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(STORAGE_EVENT));
+}
 
 function isBrowser(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -16,7 +24,7 @@ function isChallenge(value: unknown): value is Session["challenges"][number] {
     typeof value.id === "string" &&
     (value.skillId === "counting" || value.skillId === "number_recognition") &&
     typeof value.prompt === "string" &&
-    (value.objectType === "butterfly" || value.objectType === "banana" || value.objectType === "elephant") &&
+    isObjectType(value.objectType) &&
     typeof value.objectCount === "number" &&
     Number.isInteger(value.objectCount) &&
     value.objectCount >= 0 &&
@@ -82,6 +90,7 @@ function writeRaw(sessions: Session[]): void {
   if (!isBrowser()) return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    notifyStorageChange();
   } catch {
     // Private browsing, quota limits, and disabled storage must not block the
     // visual learning flow. The caller still has the in-memory session state.
@@ -113,12 +122,20 @@ export function loadSession(id: string): Session | null {
   return sessions.find((s) => s.id === id) ?? null;
 }
 
-export function createNewSession(challenges: Challenge[]): Session {
+/** Removes every session that belongs to one learner, e.g. when a child profile is deleted. */
+export function deleteSessionsFor(learnerId: string): void {
+  writeRaw(readRaw().filter((s) => s.learnerId !== learnerId));
+}
+
+export function createNewSession(
+  challenges: Challenge[],
+  { learnerId, activityId }: { learnerId: string; activityId: string },
+): Session {
   const now = new Date().toISOString();
   return {
     id: generateId(),
-    learnerId: "learner-1",
-    activityId: "jungle-counting",
+    learnerId,
+    activityId,
     startedAt: now,
     completedAt: null,
     status: "in_progress",

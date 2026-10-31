@@ -1,290 +1,168 @@
-﻿import type { CSSProperties } from "react";
+﻿"use client";
+
+import Image from "next/image";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
+import { useCallback, type PointerEvent } from "react";
+import { cn } from "@/lib/utils";
+
+type Variant = "hero" | "compact" | "backdrop";
 
 type Props = {
-  variant?: "hero" | "compact";
+  variant?: Variant;
+  /** Layers drift with the pointer on the landing hero. */
+  interactive?: boolean;
+  className?: string;
 };
 
-export default function JungleScene({ variant = "hero" }: Props) {
-  const isHero = variant === "hero";
+/** Intrinsic sizes of the generated files in /public/scenery (see scripts/generate-scenery.ts). */
+const ART = {
+  backdrop: { w: 1600, h: 900 },
+  kapok: { w: 1609, h: 1509 },
+  fig: { w: 1036, h: 1009 },
+  mid: { w: 523, h: 655 },
+  palmTall: { w: 525, h: 947 },
+  palmShort: { w: 496, h: 694 },
+  banana: { w: 345, h: 428 },
+  fern: { w: 461, h: 253 },
+  undergrowth: { w: 1600, h: 240 },
+  vines: { w: 1600, h: 320 },
+} as const;
 
+const FILES: Record<keyof typeof ART, string> = {
+  backdrop: "backdrop",
+  kapok: "tree-kapok",
+  fig: "tree-fig",
+  mid: "tree-mid",
+  palmTall: "palm-tall",
+  palmShort: "palm-short",
+  banana: "banana-plant",
+  fern: "fern",
+  undergrowth: "undergrowth",
+  vines: "hanging-vines",
+};
+
+function Art({ name, className, priority = false }: { name: keyof typeof ART; className?: string; priority?: boolean }) {
   return (
-    <div
-      aria-hidden="true"
-      className={[
-        "pointer-events-none absolute inset-0 w-full overflow-hidden",
-        isHero ? "min-h-[60vh]" : "h-32",
-      ].join(" ")}
-      style={{ zIndex: 0 } as CSSProperties}
-    >
-      {/* sky */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: "linear-gradient(180deg, #8BD3F7 0%, #C7EBFF 42%, #E0F2FE 72%, #FFF8E9 100%)",
-        }}
-      />
-
-      {/* distant hills */}
-      <svg
-        viewBox="0 0 1200 260"
-        className="absolute left-0 right-0 top-[18%] h-[34%] w-full opacity-[0.95]"
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <path
-          d="M0 180 Q 180 70, 360 140 T 720 120 T 1020 150 T 1200 110 L 1200 260 L 0 260 Z"
-          fill="#205C43"
-          opacity={0.14}
-        />
-        <path
-          d="M0 200 Q 220 110, 420 170 T 780 145 T 1200 175 L 1200 260 L 0 260 Z"
-          fill="#205C43"
-          opacity={0.10}
-        />
-      </svg>
-
-      {/* soft sun glow */}
-      <div
-        className="absolute rounded-full blur-[42px]"
-        style={{
-          width: isHero ? 220 : 120,
-          height: isHero ? 220 : 120,
-          right: isHero ? "6%" : "8%",
-          top: isHero ? "8%" : "10%",
-          background: "radial-gradient(circle, rgba(255,209,102,0.55) 0%, rgba(255,209,102,0) 70%)",
-        }}
-      />
-
-      {/* foliage clusters — back layer */}
-      <div className="absolute inset-0">
-        {/* left cluster */}
-        <div className="absolute -left-6 top-[38%] hidden sm:block" aria-hidden>
-          <TreeCluster scale={isHero ? 1 : 0.62} />
-        </div>
-        {/* right cluster */}
-        <div className="absolute -right-8 top-[34%] hidden sm:block" aria-hidden>
-          <TreeCluster scale={isHero ? 0.92 : 0.58} mirror />
-        </div>
-        {/* center small */}
-        {isHero && (
-          <div className="absolute left-[48%] top-[36%] hidden lg:block opacity-90" aria-hidden>
-            <TreeCluster scale={0.52} />
-          </div>
-        )}
-      </div>
-
-      {/* winding path */}
-      <svg
-        viewBox="0 0 1200 420"
-        className="absolute bottom-0 left-0 w-full"
-        style={{ height: isHero ? "46%" : "58%" }}
-        preserveAspectRatio="none"
-        aria-hidden
-      >
-        <path
-          d="M -10 360 C 220 310, 380 380, 560 300 C 740 220, 880 260, 1210 170 L 1210 420 L -10 420 Z"
-          fill="#FFF8E9"
-          stroke="#D8C4A6"
-          strokeWidth={3}
-        />
-        {/* dashed center line of path */}
-        <path
-          d="M 20 355 C 240 308, 400 365, 565 298 C 730 232, 880 248, 1180 178"
-          stroke="#E8D9B8"
-          strokeWidth={2}
-          strokeDasharray="10 10"
-          strokeLinecap="round"
-          fill="none"
-          opacity={0.9}
-        />
-        {/* path edge shading */}
-        <path
-          d="M -10 362 C 220 312, 380 382, 560 302 C 740 222, 880 262, 1210 172"
-          stroke="#C8B49A"
-          strokeWidth={1}
-          fill="none"
-          opacity={0.45}
-        />
-      </svg>
-
-      {/* foreground foliage / bushes along path edges */}
-      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between px-1 sm:px-3 pointer-events-none">
-        <div className="flex items-end gap-1 sm:gap-2">
-          <Bush size={isHero ? 56 : 30} color="#77B96A" />
-          <Bush size={isHero ? 42 : 24} color="#205C43" compact />
-          <Bush size={isHero ? 48 : 26} color="#77B96A" />
-        </div>
-        <div className="flex items-end gap-1 sm:gap-2">
-          <Bush size={isHero ? 44 : 24} color="#205C43" compact />
-          <Bush size={isHero ? 58 : 30} color="#77B96A" />
-          <Bush size={isHero ? 38 : 22} color="#205C43" compact />
-        </div>
-      </div>
-
-      {/* flowers */}
-      <div className="absolute inset-0" aria-hidden>
-        {isHero ? (
-          <>
-            <Flower left="16%" top="62%" size={10} color="#FF8A72" />
-            <Flower left="72%" top="58%" size={8} color="#FFD166" />
-            <Flower left="44%" top="68%" size={9} color="#FF8A72" />
-            <Flower left="86%" top="72%" size={7} color="#FFD166" />
-            <Flower left="28%" top="74%" size={8} color="#FF8A72" />
-            <Flower left="61%" top="78%" size={7} color="#FFD166" />
-          </>
-        ) : (
-          <>
-            <Flower left="18%" top="54%" size={7} color="#FF8A72" />
-            <Flower left="76%" top="48%" size={6} color="#FFD166" />
-          </>
-        )}
-      </div>
-
-      {/* butterflies — tiny SVGs */}
-      {isHero && (
-        <div className="absolute inset-0" aria-hidden>
-          <span className="absolute" style={{ left: "22%", top: "24%" }}>
-            <TinyButterfly />
-          </span>
-          <span className="absolute" style={{ left: "78%", top: "20%" }}>
-            <TinyButterfly alt />
-          </span>
-          <span className="absolute hidden sm:block" style={{ left: "52%", top: "28%" }}>
-            <TinyButterfly />
-          </span>
-        </div>
-      )}
-
-      {/* bottom jungle floor fade so content above stays legible */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-10 opacity-[0.06]"
-        style={{ background: "linear-gradient(180deg, transparent, #205C43)" }}
-      />
-    </div>
-  );
-}
-
-function TreeCluster({ scale = 1, mirror = false }: { scale?: number; mirror?: boolean }) {
-  return (
-    <div
-      className="relative"
-      style={{
-        width: 180 * scale,
-        height: 220 * scale,
-        transform: mirror ? "scaleX(-1)" : undefined,
-      }}
-    >
-      {/* trunk */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full"
-        style={{
-          bottom: 14 * scale,
-          width: 18 * scale,
-          height: 86 * scale,
-          background: "linear-gradient(180deg, #6B4E2A 0%, #4A3418 100%)",
-        }}
-      />
-      {/* foliage blobs — layered rounded shapes */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full"
-        style={{
-          bottom: 74 * scale,
-          width: 120 * scale,
-          height: 86 * scale,
-          background: "#205C43",
-          borderRadius: "54% 46% 48% 52% / 58% 52% 48% 42%",
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: 12 * scale,
-          bottom: 92 * scale,
-          width: 74 * scale,
-          height: 62 * scale,
-          background: "#77B96A",
-          borderRadius: "52% 48% 44% 56% / 50% 55% 45% 50%",
-        }}
-      />
-      <div
-        className="absolute rounded-full"
-        style={{
-          right: 14 * scale,
-          bottom: 98 * scale,
-          width: 68 * scale,
-          height: 56 * scale,
-          background: "#77B96A",
-          borderRadius: "48% 52% 56% 44% / 55% 50% 50% 45%",
-        }}
-      />
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full opacity-90"
-        style={{
-          bottom: 126 * scale,
-          width: 86 * scale,
-          height: 52 * scale,
-          background: "#1a4a36",
-          borderRadius: "50% 50% 44% 56% / 60% 60% 40% 40%",
-        }}
-      />
-    </div>
-  );
-}
-
-function Bush({ size, color, compact }: { size: number; color: string; compact?: boolean }) {
-  return (
-    <div
-      aria-hidden
-      className="rounded-full shrink-0"
-      style={{
-        width: size,
-        height: compact ? size * 0.72 : size * 0.82,
-        background: color,
-        borderRadius: "52% 48% 44% 56% / 58% 42% 58% 42%",
-        opacity: compact ? 0.92 : 1,
-        boxShadow: "inset 0 -6px 12px rgba(18,61,48,0.18)",
-      }}
+    <Image
+      src={`/scenery/${FILES[name]}.svg`}
+      alt=""
+      width={ART[name].w}
+      height={ART[name].h}
+      priority={priority}
+      unoptimized
+      draggable={false}
+      className={cn("pointer-events-none max-w-none select-none", className)}
     />
   );
 }
 
-function Flower({ left, top, size, color }: { left: string; top: string; size: number; color: string }) {
+function Layer({ depth, x, y, className, children }: { depth: number; x: MotionValue<number>; y: MotionValue<number>; className?: string; children: React.ReactNode }) {
+  const tx = useTransform(x, (v) => v * depth);
+  const ty = useTransform(y, (v) => v * depth * 0.4);
   return (
-    <span
-      aria-hidden
-      className="absolute rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.12)]"
-      style={{
-        left,
-        top,
-        width: size,
-        height: size,
-        background: color,
-        border: "1.5px solid white",
-      }}
-    >
-      <span
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
-        style={{ width: size * 0.36, height: size * 0.36 }}
-      />
-    </span>
+    <motion.div style={{ x: tx, y: ty }} className={cn("absolute inset-0", className)}>
+      {children}
+    </motion.div>
   );
 }
 
-function TinyButterfly({ alt }: { alt?: boolean }) {
+/**
+ * Layered rainforest scenery: a hazy backdrop, grown trees on both sides,
+ * undergrowth along the bottom and lianas from the top. Purely decorative.
+ */
+export default function JungleScene({ variant = "hero", interactive = false, className }: Props) {
+  const rawX = useMotionValue(0);
+  const rawY = useMotionValue(0);
+  const x = useSpring(rawX, { stiffness: 60, damping: 18 });
+  const y = useSpring(rawY, { stiffness: 60, damping: 18 });
+
+  const onPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!interactive || event.pointerType !== "mouse") return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      rawX.set(((event.clientX - rect.left) / rect.width - 0.5) * -24);
+      rawY.set(((event.clientY - rect.top) / rect.height - 0.5) * -16);
+    },
+    [interactive, rawX, rawY],
+  );
+
+  const full = variant === "hero";
+  const soft = variant === "backdrop";
+
   return (
-    <svg
-      viewBox="0 0 28 22"
-      width="22"
-      height="18"
-      className="overflow-visible drop-shadow-sm"
-      style={{ transform: alt ? "scaleX(-1)" : undefined }}
-      aria-hidden
+    <div
+      aria-hidden="true"
+      onPointerMove={interactive ? onPointerMove : undefined}
+      className={cn("absolute inset-0 overflow-hidden", interactive ? "" : "pointer-events-none", className)}
     >
-      <ellipse cx="9" cy="8" rx="7" ry="5.5" fill={alt ? "#8BD3F7" : "#FF8A72"} opacity="0.95" />
-      <ellipse cx="19" cy="8" rx="7" ry="5.5" fill="#FFD166" opacity="0.95" />
-      <ellipse cx="9.5" cy="15" rx="4.5" ry="3.5" fill={alt ? "#8BD3F7" : "#FF8A72"} opacity="0.88" />
-      <ellipse cx="18.5" cy="15" rx="4.5" ry="3.5" fill="#FFD166" opacity={0.88} />
-      <ellipse cx="14" cy="11" rx="1.6" ry="6" fill="#24352B" />
-    </svg>
+      <Layer depth={0.25} x={x} y={y} className="-inset-x-6">
+        <Art name="backdrop" priority className="absolute inset-0 h-full w-full object-cover object-bottom" />
+      </Layer>
+
+      {!soft && (
+        <Layer depth={0.5} x={x} y={y}>
+          <Art name="mid" className="sway-slow absolute bottom-[6%] left-[24%] hidden h-[38%] w-auto opacity-90 md:block" />
+          <Art name="palmShort" className="sway absolute bottom-[5%] right-[22%] hidden h-[48%] w-auto opacity-95 lg:block" />
+        </Layer>
+      )}
+
+      <Layer depth={0.85} x={x} y={y}>
+        <Art
+          name="kapok"
+          className={cn(
+            "sway-slow absolute bottom-0 w-auto",
+            full ? "-left-[38%] h-[108%] sm:-left-[26%] lg:-left-[14%]" : "-left-[30%] h-[118%] sm:-left-[18%]",
+            soft && "opacity-80",
+          )}
+        />
+        <Art
+          name="fig"
+          className={cn(
+            "sway absolute bottom-0 w-auto",
+            full ? "-right-[34%] h-[88%] sm:-right-[20%] lg:-right-[9%]" : "-right-[30%] h-[95%] sm:-right-[14%]",
+            soft && "opacity-80",
+          )}
+        />
+        {!soft && (
+          <>
+            <Art name="palmTall" className="sway absolute bottom-0 left-[6%] hidden h-[78%] w-auto sm:block lg:left-[14%]" />
+            <Art name="banana" className="sway-fast absolute bottom-[2%] right-[8%] h-[30%] w-auto sm:right-[18%]" />
+          </>
+        )}
+      </Layer>
+
+      <Layer depth={1.2} x={x} y={y}>
+        <Art name="undergrowth" className={cn("absolute -bottom-1 left-1/2 w-[140%] max-w-none -translate-x-1/2 sm:w-[112%]", full ? "h-[22%]" : "h-[18%]")} />
+        {full && <Art name="fern" className="sway-fast absolute -bottom-2 left-[34%] h-[18%] w-auto" />}
+        {!soft && (
+          <Art name="vines" className={cn("absolute -top-1 left-1/2 w-[160%] max-w-none -translate-x-1/2 sm:w-[110%]", full ? "h-[26%]" : "h-[30%]")} />
+        )}
+      </Layer>
+
+      {full && <Fireflies />}
+    </div>
+  );
+}
+
+const FIREFLIES = [
+  { left: "18%", top: "38%", d: 0 },
+  { left: "32%", top: "58%", d: 1.2 },
+  { left: "64%", top: "44%", d: 0.6 },
+  { left: "78%", top: "62%", d: 2.1 },
+  { left: "52%", top: "30%", d: 1.6 },
+  { left: "88%", top: "36%", d: 0.3 },
+];
+
+function Fireflies() {
+  return (
+    <>
+      {FIREFLIES.map((f, i) => (
+        <span
+          key={i}
+          className="firefly absolute h-1.5 w-1.5 rounded-full bg-[#FFF3B0] shadow-[0_0_10px_3px_rgba(255,236,150,0.8)]"
+          style={{ left: f.left, top: f.top, animationDelay: `${f.d}s` }}
+        />
+      ))}
+    </>
   );
 }

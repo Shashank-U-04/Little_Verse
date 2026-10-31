@@ -7,7 +7,8 @@
     "build": "next build --webpack && node scripts/check-build-css.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts tests/voiceServer.test.ts tests/micProblem.test.ts",
+    "test": "node --experimental-strip-types --test tests/learning.test.ts tests/bolna.test.ts tests/browserSpeech.test.ts tests/voiceServer.test.ts tests/micProblem.test.ts tests/gamification.test.ts",
+    "scenery": "node --experimental-strip-types scripts/generate-scenery.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Shield,
   Mic,
@@ -13,11 +15,18 @@ import {
   Info,
   AlertTriangle,
   CheckCircle2,
+  LogOut,
+  Pencil,
+  UserPlus,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { clearVoiceConsent, readVoiceConsent, type VoiceConsent } from "@/lib/voice/voiceConsent";
+import { ChildAvatar } from "@/components/family/ChildAvatar";
+import { GateLoader, useFamilyGate } from "@/components/family/useFamilyGate";
+import { deleteChild, signOut } from "@/lib/family";
+import { notifyStorageChange } from "@/lib/storage";
 
 const STORAGE_KEY = "littleverse:sessions";
 const SETTINGS_KEY = "littleverse:settings";
@@ -29,6 +38,20 @@ export default function ParentSettingsPage(): React.ReactElement {
   const [timeLimit, setTimeLimit] = useState<TimeLimit>("10");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [voiceConsent, setVoiceConsent] = useState<VoiceConsent | null>(null);
+  const family = useFamilyGate("parent");
+  const router = useRouter();
+
+  function handleRemoveChild(id: string, name: string): void {
+    if (!window.confirm(`Remove ${name}'s profile?
+
+This deletes ${name}'s adventures, XP and badges from this browser. This cannot be undone.`)) return;
+    deleteChild(id);
+  }
+
+  function handleSignOut(): void {
+    signOut();
+    router.push("/");
+  }
 
   useEffect(() => {
     try {
@@ -85,6 +108,7 @@ export default function ParentSettingsPage(): React.ReactElement {
     if (!confirmed) return;
     try {
       window.localStorage.removeItem(STORAGE_KEY);
+      notifyStorageChange();
       window.alert("Local data cleared.");
     } catch {
       window.alert("Could not clear data \— storage is unavailable.");
@@ -100,6 +124,61 @@ export default function ParentSettingsPage(): React.ReactElement {
           Manage learning preferences and understand how LittleVerse AI protects your child.
         </p>
       </div>
+
+      {!family?.parent ? (
+        <GateLoader label="Loading your family…" />
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Account &amp; explorers</CardTitle>
+            <p className="text-xs text-[#24352B]/85">
+              Signed in as <span className="font-bold">{family.parent.name}</span> ({family.parent.email}) on this device.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <ul className="divide-y divide-[#FFF4D6]">
+              {family.children.map((child, i) => (
+                <li key={child.id} className="flex flex-wrap items-center gap-3 py-3">
+                  <ChildAvatar avatar={child.avatar} size={44} tone={i} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#205C43]">{child.name}</p>
+                    <p className="text-xs text-[#24352B]/85">Age {child.age} · {child.hobbies.length ? child.hobbies.join(", ") : "No hobbies yet"}</p>
+                  </div>
+                  <Link
+                    href={`/onboarding?edit=${encodeURIComponent(child.id)}`}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#205C43]/15 px-3 text-xs font-bold text-[#205C43] hover:bg-[#205C43]/[0.06]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden />
+                    Edit
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveChild(child.id, child.name)}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[#FF8A72]/40 px-3 text-xs font-bold text-[#8a3a2a] hover:bg-[#FFE4DE]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/onboarding" className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-[#205C43] px-4 text-sm font-bold text-white hover:bg-[#184a36]">
+                <UserPlus className="h-4 w-4" aria-hidden />
+                Add a child
+              </Link>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-[#205C43]/20 bg-white px-4 text-sm font-bold text-[#205C43] hover:bg-[#FFF4D6]"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+                Sign out of this device
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* A � Learning Preferences */}
       <Card>

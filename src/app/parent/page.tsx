@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import {
@@ -22,7 +22,11 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { loadSessions } from "@/lib/storage";
+import { ChildSummaryCard } from "@/components/family/ChildSummaryCard";
+import { GateLoader, useFamilyGate } from "@/components/family/useFamilyGate";
+import { Symbol3D } from "@/components/ui/Symbol3D";
+import { computeProgress } from "@/features/gamification/progression";
+import { getAdventure } from "@/features/learning/activities";
 import { buildChartData, buildSkillProgress } from "@/features/learning/progress";
 import { scoreSession } from "@/features/learning/scoring";
 import type { Session, SkillProgress } from "@/features/learning/types";
@@ -214,21 +218,12 @@ function CustomTooltip({
 }
 
 export default function ParentOverviewPage(): React.ReactElement {
-  const [sessions, setSessions] = useState<Session[] | null>(null);
-  const [isSample, setIsSample] = useState(false);
-
-  useEffect(() => {
-    const loaded = loadSessions();
-    if (loaded.length === 0) {
-      // localStorage is the external source; sample data is an explicit demo fallback.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSessions(SAMPLE_SESSIONS);
-      setIsSample(true);
-    } else {
-      setSessions(loaded);
-      setIsSample(false);
-    }
-  }, []);
+  const family = useFamilyGate("parent");
+  const childSessions = family?.activeChild ? family.sessions : null;
+  // Sample data is an explicit, labelled demo fallback until the child plays.
+  const isSample = childSessions !== null && childSessions.length === 0;
+  const sessions = childSessions === null ? null : isSample ? SAMPLE_SESSIONS : childSessions;
+  const progress = useMemo(() => computeProgress(childSessions ?? []), [childSessions]);
 
   const ready = sessions !== null;
   const data = useMemo<Session[]>(() => sessions ?? [], [sessions]);
@@ -280,6 +275,20 @@ export default function ParentOverviewPage(): React.ReactElement {
   // session shell in localStorage.
   const showEmpty = ready && !isSample && completedData.length === 0;
 
+  if (!family) return <GateLoader label="Opening your dashboard…" />;
+  if (!family.activeChild) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-16 text-center">
+        <Symbol3D name="compass" size={80} />
+        <h1 className="font-display text-3xl font-bold text-[#123D30]">Parent Dashboard</h1>
+        <p className="max-w-md text-sm text-[#53645B]">Add your child&apos;s explorer profile to see their adventures, levels and learning evidence here.</p>
+        <Link href="/onboarding" className="inline-flex min-h-12 items-center rounded-full bg-[#205C43] px-6 font-extrabold text-white shadow-lg hover:bg-[#184a36]">
+          Add your child
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -289,7 +298,7 @@ export default function ParentOverviewPage(): React.ReactElement {
             Parent Dashboard
           </h1>
           <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#24352B]/85">
-            Meaningful learning evidence, not just screen time.
+            Meaningful learning evidence for {family.activeChild.name}, not just screen time.
           </p>
         </div>
         {isSample && ready && (
@@ -303,6 +312,8 @@ export default function ParentOverviewPage(): React.ReactElement {
           </div>
         )}
       </div>
+
+      <ChildSummaryCard child={family.activeChild} progress={progress} />
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -388,9 +399,9 @@ export default function ParentOverviewPage(): React.ReactElement {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[#205C43]">No sessions yet — start an adventure!</p>
-                <p className="mt-1 text-xs text-[#24352B]/85">Complete a Jungle Counting run to see the chart.</p>
+                <p className="mt-1 text-xs text-[#24352B]/85">Finish an adventure in the Kids Zone to see the chart.</p>
               </div>
-              <Link href="/adventure/jungle-counting" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#205C43] px-5 py-2 text-[15px] font-semibold tracking-tight text-white shadow-[0_4px_14px_rgba(32,92,67,0.25)] transition-colors hover:bg-[#184a36]">Start Jungle Counting</Link>
+              <Link href="/kids" className="inline-flex min-h-10 items-center justify-center rounded-full bg-[#205C43] px-5 py-2 text-[15px] font-semibold tracking-tight text-white shadow-[0_4px_14px_rgba(32,92,67,0.25)] transition-colors hover:bg-[#184a36]">Open the Kids Zone</Link>
             </div>
           ) : (
             <div className="h-[220px] w-full">
@@ -480,7 +491,7 @@ export default function ParentOverviewPage(): React.ReactElement {
                       </div>
                       <p className="mt-2 text-[11px] leading-relaxed text-[#24352B]/85">
                         {sp.skillId === "counting"
-                          ? "Counting objects from 1 to 5"
+                          ? "Counting groups of objects"
                           : "Recognising written numerals"}
                       </p>
                     </div>
@@ -515,7 +526,7 @@ export default function ParentOverviewPage(): React.ReactElement {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-[13px] font-semibold tracking-tight text-[#205C43]">
-                            {s.activityId === "jungle-counting" ? "Jungle Counting" : s.activityId}
+                            {getAdventure(s.activityId)?.title ?? s.activityId}
                           </p>
                           <Badge
                             variant={s.status === "completed" ? "leaf" : s.status === "in_progress" ? "sunshine" : "sky"}
@@ -559,7 +570,9 @@ export default function ParentOverviewPage(): React.ReactElement {
           <div>
             <p className="text-[13px] font-bold tracking-tight text-[#205C43]">Suggestion for next practice</p>
             <p className="mt-1 text-[13px] leading-relaxed text-[#24352B]/85">
-              Practice counting objects from 1 to 5 with a visual counting activity.
+              {progress.nextLevel
+                ? `${progress.nextLevel.xp - progress.xp} XP until ${family.activeChild.name} becomes a ${progress.nextLevel.title}. One short adventure a day keeps the streak going.`
+                : `${family.activeChild.name} has reached the top level. Replaying adventures for three stars keeps skills fresh.`}
             </p>
             <p className="mt-1.5 text-[11px] leading-relaxed text-[#24352B]/85">
               Based on recent hint rate and accuracy. Short, playful sessions build confidence — 3–5 minutes is ideal.

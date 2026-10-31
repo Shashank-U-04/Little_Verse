@@ -143,12 +143,12 @@ Expected answers and object counts are **deliberately excluded**.
 |---|---|
 | `src/app/api/**` | `src/app/parent/**` |
 | `src/lib/voice/server/**` | `src/components/**` (incl. `VoiceConsentDialog.tsx`, `VoiceButton.tsx`) |
-| `src/lib/bolna/**` | JSX/layout in `src/app/adventure/**` |
+| `src/lib/bolna/**` | JSX/layout in `src/app/adventure/**` and `src/components/adventure/**` |
 | `src/lib/voice/bolnaSession.ts`, `microphoneOwnership.ts`, `browserSpeechController.ts` | `src/app/page.tsx`, styles |
 | `.env.example`, Vercel/Upstash/Bolna dashboard config | Demo script, screenshots, pitch video |
 | `tests/bolna.test.ts`, `tests/voiceServer.test.ts` | `tests/e2e/learning.spec.ts` (coordinate — shared) |
 
-**Shared, coordinate before editing:** `src/app/adventure/jungle-counting/page.tsx` (voice wiring), `src/lib/voice/voiceConsent.ts`, `src/lib/voice/voiceStatus.ts`, `package.json`. If you need a contract change (new error code, new status field), agree it with Developer A first.
+**Shared, coordinate before editing:** `src/components/adventure/AdventurePlayer.tsx` (voice wiring, shared by every adventure route), `src/lib/voice/voiceConsent.ts`, `src/lib/voice/voiceStatus.ts`, `package.json`. If you need a contract change (new error code, new status field), agree it with Developer A first.
 
 **Do not touch:** `src/features/learning/**` (the deterministic learning engine) without both developers agreeing.
 
